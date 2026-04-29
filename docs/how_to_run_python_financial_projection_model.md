@@ -7,40 +7,42 @@
 
 ## 2) Open a terminal in VS Code
 1. In VS Code, click **Terminal -> New Terminal**.
-2. Confirm you are in the project root (you should see files like `data/` and `python_financial_projection_model_logic.py`).
+2. Confirm you are in the project root (you should see files like `data/` and `python_financial_projection_model.py`).
+
+3. If not in the project root, change directory first (example):
+   ```powershell
+   cd C:\path\to\fleet_management
 
 ## 3) Create and activate a virtual environment
-
-### Linux / macOS
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
 
 ### Windows (PowerShell)
 ```powershell
 python -m venv .venv
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 .venv\Scripts\Activate.ps1
 ```
+
+If you created/activated the venv in **PowerShell**, keep using the **same PowerShell session** for the next commands.
+There is **no need to switch to Git Bash** after activation.
 
 ## 4) Install dependencies
 The script uses `openpyxl` for Excel read/write.
 
-```bash
+```powershell
 pip install openpyxl
 ```
 
 ## 5) Validate script syntax (optional but recommended)
-```bash
-python -m py_compile python_financial_projection_model_logic.py
+```powershell
+python -m scripts/py_compile python_financial_projection_model.py
 ```
 
 ## 6) Run the model generator
 Run with explicit input and output paths:
 
-```bash
-python python_financial_projection_model_logic.py \
-  --input data/financial_projections.xlsx \
+```powershell
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
   --output data/financial_projections_generated.xlsx
 ```
 
@@ -67,8 +69,8 @@ And it enforces requested assumptions:
 ## 8) Run with auto-generated output filename
 If you omit `--output`, the script creates a timestamped output in `data/`:
 
-```bash
-python python_financial_projection_model_logic.py --input data/financial_projections.xlsx
+```powershell
+python python_financial_projection_model.py --input data/financial_projections.xlsx
 ```
 
 Example output filename format:
@@ -78,7 +80,7 @@ Example output filename format:
 
 ### Error: `ModuleNotFoundError: No module named 'openpyxl'`
 Install dependency:
-```bash
+```powershell
 pip install openpyxl
 ```
 
