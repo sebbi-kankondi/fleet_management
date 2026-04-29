@@ -245,7 +245,7 @@ def ensure_required_assumptions(assumptions_ws):
 
 
 # Read assumptions from sheet into dictionary keyed by label.
-def read_assumption_values(assumptions_ws) -> Dict[str, float]:
+def read_assumption_values(assumptions_ws, assumptions_values_ws=None) -> Dict[str, float]:
     # Parse assumption numeric values from numbers or formatted strings (currency/percent).
     def parse_assumption_numeric(value) -> float:
         # Fast-path for native numeric cells.
@@ -296,6 +296,11 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
         # Read label and numeric value cells.
         label = assumptions_ws.cell(row=row, column=1).value
         value = assumptions_ws.cell(row=row, column=2).value
+        # Prefer cached formula result from a data_only workbook when available.
+        if isinstance(value, str) and value.strip().startswith("=") and assumptions_values_ws is not None:
+            cached_value = assumptions_values_ws.cell(row=row, column=2).value
+            if cached_value is not None:
+                value = cached_value
         # Skip rows with missing labels or values.
         if label is None or value is None:
             continue
@@ -769,8 +774,11 @@ def run_validations(income_rows: List[IncomeRow], cash_rows: List[CashFlowRow], 
 def run_projection(input_path: Path, output_path: Path):
     # Load workbook template from input path.
     wb = load_workbook(filename=input_path)
+    # Load data-only workbook for cached formula results in assumption cells.
+    wb_values = load_workbook(filename=input_path, data_only=True)
     # Get sheet handles used by the model.
     assumptions_ws = wb["Assumptions"]
+    assumptions_values_ws = wb_values["Assumptions"]
     fleet_ws = wb["Fleet_Schedule"]
     income_ws = wb["Income_Statement"]
     cash_ws = wb["Cash_Flow"]
@@ -780,7 +788,7 @@ def run_projection(input_path: Path, output_path: Path):
     # Apply required assumption updates/additions.
     ensure_required_assumptions(assumptions_ws)
     # Read assumptions from sheet after updates.
-    assumption_values = read_assumption_values(assumptions_ws)
+    assumption_values = read_assumption_values(assumptions_ws, assumptions_values_ws)
     # Convert assumptions into typed object.
     assumptions = build_assumptions(assumption_values)
 
