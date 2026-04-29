@@ -303,6 +303,10 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
 
         # Read only labels the model actually consumes; ignore decorative or formula helper rows.
         if label_str not in REQUIRED_ASSUMPTION_LABELS:
+        # Skip header rows (e.g. "Assumption" / "Value") if present in exported templates.
+        label_text = str(label).strip().lower()
+        value_text = str(value).strip().lower()
+        if label_text in {"assumption", "label"} and value_text in {"value", "amount"}:
             continue
 
         # Store normalized numeric values by label text.
