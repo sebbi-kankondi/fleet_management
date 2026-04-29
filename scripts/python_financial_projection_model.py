@@ -357,7 +357,63 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
 
 
 # Read fleet schedule inputs from Fleet_Schedule sheet.
-def read_fleet_schedule(fleet_ws) -> List[FleetRow]:
+def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
+    # Resolve formula text using cached values from optional data-only workbook.
+    def resolve_cell_value(value, *, row_number: int, column_number: int, column_name: str):
+        resolved_value = value
+        if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
+            if fleet_values_ws is not None:
+                cached = fleet_values_ws.cell(row=row_number, column=column_number).value
+                if cached is not None:
+                    resolved_value = cached
+            if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
+                raise ValueError(
+                    f"Fleet schedule {column_name} at row {row_number} is a formula without cached value. "
+                    "Recalculate and save the workbook, then rerun the script."
+                )
+        return resolved_value
+
+    # Parse integer-like cells and handle formula cells via optional data-only workbook.
+    def parse_int_cell(value, *, row_number: int, column_number: int, column_name: str) -> int:
+        resolved_value = resolve_cell_value(
+            value, row_number=row_number, column_number=column_number, column_name=column_name
+        )
+
+        # Accept native numeric values.
+        if isinstance(resolved_value, (int, float)):
+            return int(float(resolved_value))
+
+        # Parse string numerics such as '12' or '12.0'.
+        if isinstance(resolved_value, str):
+            text = resolved_value.strip()
+            if text == "":
+                return 0
+            return int(float(text))
+
+        # Default None/missing values to zero.
+        if resolved_value is None:
+            return 0
+
+        raise ValueError(f"Unsupported fleet schedule {column_name} value at row {row_number}: {resolved_value!r}")
+
+    # Parse float-like cells and handle formula cells via optional data-only workbook.
+    def parse_float_cell(value, *, row_number: int, column_number: int, column_name: str) -> float:
+        resolved_value = resolve_cell_value(
+            value, row_number=row_number, column_number=column_number, column_name=column_name
+        )
+
+        # Parse numeric and string values with blanks defaulting to zero.
+        if resolved_value is None:
+            return 0.0
+        if isinstance(resolved_value, (int, float)):
+            return float(resolved_value)
+        if isinstance(resolved_value, str):
+            text = resolved_value.strip()
+            if text == "":
+                return 0.0
+            return float(text.replace(",", ""))
+        raise ValueError(f"Unsupported fleet schedule {column_name} value at row {row_number}: {resolved_value!r}")
+
     # Allocate list to collect month rows.
     rows: List[FleetRow] = []
     # Iterate from first data row to end of used range.
@@ -367,16 +423,17 @@ def read_fleet_schedule(fleet_ws) -> List[FleetRow]:
         year = fleet_ws.cell(row=row, column=2).value
         cars_purchased = fleet_ws.cell(row=row, column=4).value
         cars_in_operation = fleet_ws.cell(row=row, column=7).value
-        # Stop when month index is missing.
-        if month is None:
+        # Stop when month index is missing (including blank formula/text cells).
+        resolved_month = resolve_cell_value(month, row_number=row, column_number=1, column_name="month")
+        if resolved_month is None or (isinstance(resolved_month, str) and resolved_month.strip() == ""):
             break
         # Append typed row with safe defaults for blanks.
         rows.append(
             FleetRow(
-                month=int(month),
-                year=int(year or 0),
-                cars_purchased=float(cars_purchased or 0.0),
-                cars_in_operation=float(cars_in_operation or 0.0),
+                month=parse_int_cell(resolved_month, row_number=row, column_number=1, column_name="month"),
+                year=parse_int_cell(year, row_number=row, column_number=2, column_name="year"),
+                cars_purchased=parse_float_cell(cars_purchased, row_number=row, column_number=4, column_name="cars_purchased"),
+                cars_in_operation=parse_float_cell(cars_in_operation, row_number=row, column_number=7, column_name="cars_in_operation"),
             )
         )
     # Return extracted fleet rows.
@@ -780,6 +837,7 @@ def run_projection(input_path: Path, output_path: Path):
     assumptions_ws = wb["Assumptions"]
     assumptions_values_ws = wb_values["Assumptions"]
     fleet_ws = wb["Fleet_Schedule"]
+    fleet_values_ws = wb_values["Fleet_Schedule"]
     income_ws = wb["Income_Statement"]
     cash_ws = wb["Cash_Flow"]
     loan_ws = wb["Loan_Amortisation"]
@@ -793,7 +851,7 @@ def run_projection(input_path: Path, output_path: Path):
     assumptions = build_assumptions(assumption_values)
 
     # Read fleet schedule source rows.
-    fleet_rows = read_fleet_schedule(fleet_ws)
+    fleet_rows = read_fleet_schedule(fleet_ws, fleet_values_ws)
     # Build monthly income statement rows.
     income_rows = build_income_statement_rows(assumptions, fleet_rows)
     # Build loan amortisation rows using model horizon.
