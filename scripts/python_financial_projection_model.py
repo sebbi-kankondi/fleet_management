@@ -43,6 +43,26 @@ ASSUMPTION_KEYS = {
 }
 
 
+
+REQUIRED_ASSUMPTION_LABELS = {
+    ASSUMPTION_KEYS["monthly_gross_revenue_per_car"],
+    ASSUMPTION_KEYS["fuel_per_car"],
+    ASSUMPTION_KEYS["airtime_per_car"],
+    ASSUMPTION_KEYS["carwash_per_car"],
+    "Maintenance expense per active car (monthly)",
+    "Driver subsistence allocation per operating car (monthly)",
+    "Incidental repair reserve per operating car (monthly)",
+    "Tracking device expense per operating car (monthly)",
+    ASSUMPTION_KEYS["salary_per_car"],
+    ASSUMPTION_KEYS["tax_rate"],
+    ASSUMPTION_KEYS["car_unit_cost"],
+    ASSUMPTION_KEYS["owner_equity"],
+    ASSUMPTION_KEYS["bank_draw"],
+    ASSUMPTION_KEYS["bank_draw_month"],
+    ASSUMPTION_KEYS["bank_instalment"],
+    ASSUMPTION_KEYS["bank_annual_interest"],
+}
+
 # Define a typed assumptions object so all downstream calculations consume consistent fields.
 @dataclass
 class Assumptions:
@@ -279,6 +299,10 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
         # Skip rows with missing labels or values.
         if label is None or value is None:
             continue
+        label_str = str(label).strip()
+
+        # Read only labels the model actually consumes; ignore decorative or formula helper rows.
+        if label_str not in REQUIRED_ASSUMPTION_LABELS:
         # Skip header rows (e.g. "Assumption" / "Value") if present in exported templates.
         label_text = str(label).strip().lower()
         value_text = str(value).strip().lower()
@@ -287,7 +311,7 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
 
         # Store normalized numeric values by label text.
         try:
-            values[str(label)] = parse_assumption_numeric(value)
+            values[label_str] = parse_assumption_numeric(value)
         except ValueError as exc:
             raise ValueError(f"Could not parse assumption value for label '{label}' at row {row}: {value!r}") from exc
     # Return mapping for downstream field extraction.
