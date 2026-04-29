@@ -241,13 +241,29 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
             raise ValueError("Assumption value is blank.")
 
         is_percent = "%" in text_value
-        cleaned = (
+        normalized = (
             text_value.replace("N$", "")
             .replace("$", "")
-            .replace(",", "")
             .replace("%", "")
             .strip()
         )
+
+        # Validate comma usage so decimal commas fail fast instead of being misparsed.
+        if "," in normalized:
+            unsigned = normalized.lstrip("+-")
+            integer_part, dot, _fractional_part = unsigned.partition(".")
+            comma_groups = integer_part.split(",")
+            # Allow commas only as thousands separators in the integer part.
+            if len(comma_groups) == 1:
+                raise ValueError("Ambiguous comma in assumption value; use '.' for decimals.")
+            if any(group == "" for group in comma_groups):
+                raise ValueError("Invalid comma placement in assumption value.")
+            if not (1 <= len(comma_groups[0]) <= 3 and all(len(group) == 3 for group in comma_groups[1:])):
+                raise ValueError("Invalid comma placement in assumption value.")
+            if dot and "," in _fractional_part:
+                raise ValueError("Invalid comma placement in assumption value.")
+
+        cleaned = normalized.replace(",", "")
 
         # Parse cleaned numeric text.
         numeric_value = float(cleaned)
