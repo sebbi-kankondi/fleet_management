@@ -279,6 +279,12 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
         # Skip rows with missing labels or values.
         if label is None or value is None:
             continue
+        # Skip header rows (e.g. "Assumption" / "Value") if present in exported templates.
+        label_text = str(label).strip().lower()
+        value_text = str(value).strip().lower()
+        if label_text in {"assumption", "label"} and value_text in {"value", "amount"}:
+            continue
+
         # Store normalized numeric values by label text.
         try:
             values[str(label)] = parse_assumption_numeric(value)
