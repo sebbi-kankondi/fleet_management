@@ -358,14 +358,12 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
 
 # Read fleet schedule inputs from Fleet_Schedule sheet.
 def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
-    # Parse integer-like cells and handle formula cells via optional data-only workbook.
-    def parse_int_cell(value, *, row_number: int, column_name: str) -> int:
-        # Resolve formula text using cached value where possible.
+    # Resolve formula text using cached values from optional data-only workbook.
+    def resolve_cell_value(value, *, row_number: int, column_number: int, column_name: str):
         resolved_value = value
         if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
             if fleet_values_ws is not None:
-                column_index = {"month": 1, "year": 2}[column_name]
-                cached = fleet_values_ws.cell(row=row_number, column=column_index).value
+                cached = fleet_values_ws.cell(row=row_number, column=column_number).value
                 if cached is not None:
                     resolved_value = cached
             if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
@@ -373,6 +371,13 @@ def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
                     f"Fleet schedule {column_name} at row {row_number} is a formula without cached value. "
                     "Recalculate and save the workbook, then rerun the script."
                 )
+        return resolved_value
+
+    # Parse integer-like cells and handle formula cells via optional data-only workbook.
+    def parse_int_cell(value, *, row_number: int, column_number: int, column_name: str) -> int:
+        resolved_value = resolve_cell_value(
+            value, row_number=row_number, column_number=column_number, column_name=column_name
+        )
 
         # Accept native numeric values.
         if isinstance(resolved_value, (int, float)):
@@ -393,18 +398,9 @@ def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
 
     # Parse float-like cells and handle formula cells via optional data-only workbook.
     def parse_float_cell(value, *, row_number: int, column_number: int, column_name: str) -> float:
-        # Resolve formula text using cached value where possible.
-        resolved_value = value
-        if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
-            if fleet_values_ws is not None:
-                cached = fleet_values_ws.cell(row=row_number, column=column_number).value
-                if cached is not None:
-                    resolved_value = cached
-            if isinstance(resolved_value, str) and resolved_value.strip().startswith("="):
-                raise ValueError(
-                    f"Fleet schedule {column_name} at row {row_number} is a formula without cached value. "
-                    "Recalculate and save the workbook, then rerun the script."
-                )
+        resolved_value = resolve_cell_value(
+            value, row_number=row_number, column_number=column_number, column_name=column_name
+        )
 
         # Parse numeric and string values with blanks defaulting to zero.
         if resolved_value is None:
@@ -427,14 +423,15 @@ def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
         year = fleet_ws.cell(row=row, column=2).value
         cars_purchased = fleet_ws.cell(row=row, column=4).value
         cars_in_operation = fleet_ws.cell(row=row, column=7).value
-        # Stop when month index is missing.
-        if month is None:
+        # Stop when month index is missing (including blank formula/text cells).
+        resolved_month = resolve_cell_value(month, row_number=row, column_number=1, column_name="month")
+        if resolved_month is None or (isinstance(resolved_month, str) and resolved_month.strip() == ""):
             break
         # Append typed row with safe defaults for blanks.
         rows.append(
             FleetRow(
-                month=parse_int_cell(month, row_number=row, column_name="month"),
-                year=parse_int_cell(year, row_number=row, column_name="year"),
+                month=parse_int_cell(resolved_month, row_number=row, column_number=1, column_name="month"),
+                year=parse_int_cell(year, row_number=row, column_number=2, column_name="year"),
                 cars_purchased=parse_float_cell(cars_purchased, row_number=row, column_number=4, column_name="cars_purchased"),
                 cars_in_operation=parse_float_cell(cars_in_operation, row_number=row, column_number=7, column_name="cars_in_operation"),
             )
