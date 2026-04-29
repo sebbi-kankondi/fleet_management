@@ -43,7 +43,7 @@ Run with explicit input and output paths:
 ```powershell
 python scripts/python_financial_projection_model.py `
   --input data/financial_projections.xlsx `
-  --output data/financial_projections_generated.xlsx
+  --output data/financial_projections_final.xlsx
 ```
 
 If successful, it prints a completion message with the output file path.
@@ -74,7 +74,7 @@ python python_financial_projection_model.py --input data/financial_projections.x
 ```
 
 Example output filename format:
-- `data/financial_projections_generated_YYYYMMDD_HHMMSS.xlsx`
+- `data/financial_projections_final_YYYYMMDD_HHMMSS.xlsx`
 
 ## 9) Troubleshooting
 
