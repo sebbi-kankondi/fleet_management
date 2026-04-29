@@ -226,6 +226,33 @@ def ensure_required_assumptions(assumptions_ws):
 
 # Read assumptions from sheet into dictionary keyed by label.
 def read_assumption_values(assumptions_ws) -> Dict[str, float]:
+    # Parse assumption numeric values from numbers or formatted strings (currency/percent).
+    def parse_assumption_numeric(value) -> float:
+        # Fast-path for native numeric cells.
+        if isinstance(value, (int, float)):
+            return float(value)
+        # Reject unsupported empty values.
+        if value is None:
+            raise ValueError("Assumption value is empty.")
+
+        # Normalize text values (e.g. '15%', 'N$ 12,500').
+        text_value = str(value).strip()
+        if text_value == "":
+            raise ValueError("Assumption value is blank.")
+
+        is_percent = "%" in text_value
+        cleaned = (
+            text_value.replace("N$", "")
+            .replace("$", "")
+            .replace(",", "")
+            .replace("%", "")
+            .strip()
+        )
+
+        # Parse cleaned numeric text.
+        numeric_value = float(cleaned)
+        return numeric_value / 100.0 if is_percent else numeric_value
+
     # Create an empty dictionary for values.
     values = {}
     # Iterate all rows in assumptions sheet.
@@ -236,8 +263,11 @@ def read_assumption_values(assumptions_ws) -> Dict[str, float]:
         # Skip rows with missing labels or values.
         if label is None or value is None:
             continue
-        # Store raw values by label text.
-        values[str(label)] = float(value)
+        # Store normalized numeric values by label text.
+        try:
+            values[str(label)] = parse_assumption_numeric(value)
+        except ValueError as exc:
+            raise ValueError(f"Could not parse assumption value for label '{label}' at row {row}: {value!r}") from exc
     # Return mapping for downstream field extraction.
     return values
 
