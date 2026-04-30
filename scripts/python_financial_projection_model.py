@@ -215,6 +215,7 @@ def ensure_required_assumptions(assumptions_ws):
     # Force row 6 content to the requested vehicle disposal trigger values.
     assumptions_ws.cell(row=6, column=1, value="Vehicle disposal trigger")
     assumptions_ws.cell(row=6, column=2, value=2)
+    assumptions_ws.cell(row=6, column=2).number_format = "0"
     assumptions_ws.cell(row=6, column=3, value="Years")
     assumptions_ws.cell(row=6, column=4, value="car trigger for the disposal (with no disposal revenue) of all vehicles.")
 
@@ -224,23 +225,90 @@ def ensure_required_assumptions(assumptions_ws):
     # Write the requested assumptions into rows 12-15.
     assumptions_ws.cell(row=12, column=1, value="Driver subsistence")
     assumptions_ws.cell(row=12, column=2, value=1400)
+    assumptions_ws.cell(row=12, column=2).number_format = '"N$" #,##0.00'
     assumptions_ws.cell(row=12, column=3, value="N$ / car / month")
     assumptions_ws.cell(row=12, column=4, value="For client upkeep")
 
     assumptions_ws.cell(row=13, column=1, value="Incidental repair reserve")
     assumptions_ws.cell(row=13, column=2, value=500)
+    assumptions_ws.cell(row=13, column=2).number_format = '"N$" #,##0.00'
     assumptions_ws.cell(row=13, column=3, value="N$ / car / month")
     assumptions_ws.cell(row=13, column=4, value="Internal repair insurance")
 
     assumptions_ws.cell(row=14, column=1, value="Tracking device expense")
     assumptions_ws.cell(row=14, column=2, value=950)
+    assumptions_ws.cell(row=14, column=2).number_format = '"N$" #,##0.00'
     assumptions_ws.cell(row=14, column=3, value="N$ / car / month")
     assumptions_ws.cell(row=14, column=4, value="Monthly payment for 3 year contract. 1 tracking device & 1 dashcam.")
 
     assumptions_ws.cell(row=15, column=1, value="Cost of sales")
     assumptions_ws.cell(row=15, column=2, value=None)
+    assumptions_ws.cell(row=15, column=2).number_format = '"N$" #,##0.00'
     assumptions_ws.cell(row=15, column=3, value="N$ / car / month")
     assumptions_ws.cell(row=15, column=4, value="fuel+airtime+carwash+maintenance+subsistence+repairs+tracking.")
+
+    # Recalculate Cost of sales from rows 8-11 plus inserted subsistence/repair/tracking values.
+    def get_value(label: str) -> float:
+        row = find_assumption_row(assumptions_ws, label)
+        if row is None:
+            raise KeyError(f"Required assumption row not found for update: {label}")
+        cell_value = assumptions_ws.cell(row=row, column=2).value
+        return float(cell_value) if cell_value is not None else 0.0
+
+    cost_of_sales_value = (
+        get_value(ASSUMPTION_KEYS["fuel_per_car"])
+        + get_value(ASSUMPTION_KEYS["airtime_per_car"])
+        + get_value(ASSUMPTION_KEYS["carwash_per_car"])
+        + get_value("Maintenance expense per active car (monthly)")
+        + get_value("Driver subsistence")
+        + get_value("Incidental repair reserve")
+        + get_value("Tracking device expense")
+    )
+    assumptions_ws.cell(row=15, column=2, value=cost_of_sales_value)
+
+    # Ensure Monthly Gross profit per car is ordered above Salary and Total operating expenses rows.
+    gross_profit_row = find_assumption_row(assumptions_ws, "Monthly Gross profit per car")
+    salary_row = find_assumption_row(assumptions_ws, ASSUMPTION_KEYS["salary_per_car"])
+    total_opex_row = find_assumption_row(assumptions_ws, "Total operating expenses per operating car (monthly)")
+    if gross_profit_row is None or salary_row is None or total_opex_row is None:
+        raise KeyError("Could not find one of required rows: Monthly Gross profit, Salary, or Total operating expenses.")
+
+    # Collect values first, then remove old rows and reinsert in requested order.
+    row_payloads = []
+    for row_idx in (gross_profit_row, salary_row, total_opex_row):
+        row_payloads.append([assumptions_ws.cell(row=row_idx, column=col).value for col in range(1, 5)])
+    for row_idx in sorted((gross_profit_row, salary_row, total_opex_row), reverse=True):
+        assumptions_ws.delete_rows(row_idx, 1)
+
+    insert_at = min(gross_profit_row, salary_row, total_opex_row)
+    assumptions_ws.insert_rows(insert_at, amount=3)
+    for offset, payload in enumerate(row_payloads):
+        for col_idx, value in enumerate(payload, start=1):
+            assumptions_ws.cell(row=insert_at + offset, column=col_idx, value=value)
+
+    gross_profit_row = insert_at
+    salary_row = insert_at + 1
+    total_opex_row = insert_at + 2
+
+    # Total operating expense per car should only be salary.
+    salary_value = float(assumptions_ws.cell(row=salary_row, column=2).value or 0.0)
+    assumptions_ws.cell(row=total_opex_row, column=2, value=salary_value)
+    assumptions_ws.cell(row=total_opex_row, column=2).number_format = '"N$" #,##0.00'
+
+    # Monthly Gross profit per car should be monthly gross revenue per car minus cost of sales.
+    revenue_row = find_assumption_row(assumptions_ws, ASSUMPTION_KEYS["monthly_gross_revenue_per_car"])
+    revenue_value = float(assumptions_ws.cell(row=revenue_row, column=2).value or 0.0) if revenue_row else 0.0
+    assumptions_ws.cell(row=gross_profit_row, column=2, value=revenue_value - cost_of_sales_value)
+    assumptions_ws.cell(row=gross_profit_row, column=2).number_format = '"N$" #,##0.00'
+
+    # Insert one empty row after total operating expenses and place Operating Profit in the new row.
+    assumptions_ws.insert_rows(total_opex_row + 1, amount=1)
+    operating_profit_row = total_opex_row + 1
+    assumptions_ws.cell(row=operating_profit_row, column=1, value="Operating Profit")
+    assumptions_ws.cell(row=operating_profit_row, column=2, value=(revenue_value - cost_of_sales_value) - salary_value)
+    assumptions_ws.cell(row=operating_profit_row, column=2).number_format = '"N$" #,##0.00'
+    assumptions_ws.cell(row=operating_profit_row, column=3, value="N$ / car / month")
+    assumptions_ws.cell(row=operating_profit_row, column=4, value="Gross profit - Value for Operating Expense.")
 
 
 # Read assumptions from sheet into dictionary keyed by label.
