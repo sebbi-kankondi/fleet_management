@@ -203,6 +203,15 @@ def find_assumption_row(assumptions_ws, label: str):
 
 # Ensure required assumptions exist and force the new requested values.
 def ensure_required_assumptions(assumptions_ws):
+    # Keep key cost assumptions aligned with required overrides used in downstream calculations.
+    for label, value in (
+        (ASSUMPTION_KEYS["airtime_per_car"], 290),
+        ("Maintenance expense per active car (monthly)", 1250),
+    ):
+        row = find_assumption_row(assumptions_ws, label)
+        if row is not None:
+            assumptions_ws.cell(row=row, column=2, value=value)
+
     # Force row 6 content to the requested vehicle disposal trigger values.
     assumptions_ws.cell(row=6, column=1, value="Vehicle disposal trigger")
     assumptions_ws.cell(row=6, column=2, value=2)
