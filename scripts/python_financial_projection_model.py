@@ -275,6 +275,7 @@ def ensure_required_assumptions(assumptions_ws):
     cost_component_values = [get_value(label) for label in cost_component_labels]
     if all(value is not None for value in cost_component_values):
         assumptions_ws.cell(row=15, column=2, value=sum(cost_component_values))
+    cost_of_sales_value = float(assumptions_ws.cell(row=15, column=2).value or 0.0)
 
     # Ensure Monthly Gross profit per car is ordered above Salary and Total operating expenses rows.
     gross_profit_row = find_assumption_row(assumptions_ws, "Monthly Gross profit per car")
