@@ -7,7 +7,7 @@
 
 ## 2) Open powershell
 1. change directory first (example):
-   ```vscode terminal
+   ```powershell
    cd C:\path\to\fleet_management
 2. Confirm you are in the project root
 pwd
@@ -35,7 +35,7 @@ pip install openpyxl
 
 ## 5) Validate script syntax (optional but recommended)
 ```powershell
-python -m scripts/py_compile scripts/python_financial_projection_model.py
+python -m py_compile scripts/python_financial_projection_model.py
 ```
 
 ## 6) Run the model generator
@@ -90,3 +90,13 @@ Check the path passed to `--input` and ensure the file exists.
 
 ### Output looks unchanged
 Ensure you opened the generated output file (the `--output` path or timestamped file), not the original source file.
+
+## 10) After first run
+```powershell
+   cd C:\path\to\fleet_management #go to root directory
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.venv\Scripts\Activate.ps1 #reactivate venv
+python -m py_compile scripts/python_financial_projection_model.py #validate script syntax
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx #generate final projections file
