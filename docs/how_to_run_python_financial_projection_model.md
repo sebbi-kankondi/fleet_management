@@ -5,13 +5,14 @@
 2. Go to **File -> Open Folder**.
 3. Select the project root folder: `fleet_management`.
 
-## 2) Open a terminal in VS Code
-1. In VS Code, click **Terminal -> New Terminal**.
-2. Confirm you are in the project root (you should see files like `data/` and `python_financial_projection_model.py`).
-
-3. If not in the project root, change directory first (example):
-   ```powershell
+## 2) Open powershell
+1. change directory first (example):
+   ```vscode terminal
    cd C:\path\to\fleet_management
+2. Confirm you are in the project root
+pwd
+dir
+(you should see files like `data/` and `python_financial_projection_model.py`).
 
 ## 3) Create and activate a virtual environment
 
@@ -34,7 +35,7 @@ pip install openpyxl
 
 ## 5) Validate script syntax (optional but recommended)
 ```powershell
-python -m scripts/py_compile python_financial_projection_model.py
+python -m scripts/py_compile scripts/python_financial_projection_model.py
 ```
 
 ## 6) Run the model generator
