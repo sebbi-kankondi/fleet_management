@@ -248,23 +248,33 @@ def ensure_required_assumptions(assumptions_ws):
     assumptions_ws.cell(row=15, column=4, value="fuel+airtime+carwash+maintenance+subsistence+repairs+tracking.")
 
     # Recalculate Cost of sales from rows 8-11 plus inserted subsistence/repair/tracking values.
-    def get_value(label: str) -> float:
+    def get_value(label: str) -> float | None:
         row = find_assumption_row(assumptions_ws, label)
         if row is None:
             raise KeyError(f"Required assumption row not found for update: {label}")
         cell_value = assumptions_ws.cell(row=row, column=2).value
-        return float(cell_value) if cell_value is not None else 0.0
+        if cell_value is None:
+            return 0.0
+        if isinstance(cell_value, str):
+            text_value = cell_value.strip()
+            if text_value.startswith("="):
+                return None
+            normalized = text_value.replace("N$", "").replace("$", "").replace(",", "").strip()
+            return float(normalized)
+        return float(cell_value)
 
-    cost_of_sales_value = (
-        get_value(ASSUMPTION_KEYS["fuel_per_car"])
-        + get_value(ASSUMPTION_KEYS["airtime_per_car"])
-        + get_value(ASSUMPTION_KEYS["carwash_per_car"])
-        + get_value("Maintenance expense per active car (monthly)")
-        + get_value("Driver subsistence")
-        + get_value("Incidental repair reserve")
-        + get_value("Tracking device expense")
+    cost_component_labels = (
+        ASSUMPTION_KEYS["fuel_per_car"],
+        ASSUMPTION_KEYS["airtime_per_car"],
+        ASSUMPTION_KEYS["carwash_per_car"],
+        "Maintenance expense per active car (monthly)",
+        "Driver subsistence",
+        "Incidental repair reserve",
+        "Tracking device expense",
     )
-    assumptions_ws.cell(row=15, column=2, value=cost_of_sales_value)
+    cost_component_values = [get_value(label) for label in cost_component_labels]
+    if all(value is not None for value in cost_component_values):
+        assumptions_ws.cell(row=15, column=2, value=sum(cost_component_values))
 
     # Ensure Monthly Gross profit per car is ordered above Salary and Total operating expenses rows.
     gross_profit_row = find_assumption_row(assumptions_ws, "Monthly Gross profit per car")
