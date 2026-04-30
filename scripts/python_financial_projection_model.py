@@ -201,6 +201,52 @@ def find_assumption_row(assumptions_ws, label: str):
     return None
 
 
+
+
+# Apply required structural and label updates to the Assumptions sheet rows.
+def normalize_assumptions_sheet_layout(assumptions_ws):
+    # Set row 6 values exactly as requested.
+    assumptions_ws.cell(row=6, column=1, value="Vehicle disposal trigger")
+    assumptions_ws.cell(row=6, column=2, value=2)
+    assumptions_ws.cell(row=6, column=3, value="Years")
+    assumptions_ws.cell(
+        row=6,
+        column=4,
+        value="car trigger for the disposal (with no disposal revenue) of all vehicles.",
+    )
+
+    # Move existing row 12 downward by four rows, shifting all following rows equally.
+    assumptions_ws.insert_rows(12, amount=4)
+
+    # Move current rows 34-37 into the newly-created rows 12-15.
+    for offset in range(4):
+        src_row = 34 + 4 + offset
+        dst_row = 12 + offset
+        for col in range(1, 5):
+            assumptions_ws.cell(row=dst_row, column=col, value=assumptions_ws.cell(row=src_row, column=col).value)
+
+    # Apply requested labels and notes for amended rows 12-15 while preserving values/units.
+    assumptions_ws.cell(row=12, column=1, value="Driver subsistence")
+    assumptions_ws.cell(row=12, column=4, value="For client upkeep")
+
+    assumptions_ws.cell(row=13, column=1, value="Incidental repair reserve")
+    assumptions_ws.cell(row=13, column=4, value="Internal repair insurance")
+
+    assumptions_ws.cell(row=14, column=1, value="Tracking device expense")
+    assumptions_ws.cell(
+        row=14,
+        column=4,
+        value="Monthly payment for 3 year contract. 1 tracking device & 1 dashcam.",
+    )
+
+    assumptions_ws.cell(row=15, column=1, value="Cost of sales")
+    assumptions_ws.cell(
+        row=15,
+        column=4,
+        value="fuel+airtime+carwash+maintenance+subsistence+repairs+tracking.",
+    )
+
+
 # Ensure required assumptions exist and force the new requested values.
 def ensure_required_assumptions(assumptions_ws):
     # Define required overrides/additions based on user requirements.
@@ -843,7 +889,8 @@ def run_projection(input_path: Path, output_path: Path):
     loan_ws = wb["Loan_Amortisation"]
     balance_ws = wb["Balance_Sheet"]
 
-    # Apply required assumption updates/additions.
+    # Apply required structural/layout updates and assumption updates/additions.
+    normalize_assumptions_sheet_layout(assumptions_ws)
     ensure_required_assumptions(assumptions_ws)
     # Read assumptions from sheet after updates.
     assumption_values = read_assumption_values(assumptions_ws, assumptions_values_ws)
