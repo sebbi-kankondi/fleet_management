@@ -50,9 +50,9 @@ REQUIRED_ASSUMPTION_LABELS = {
     ASSUMPTION_KEYS["airtime_per_car"],
     ASSUMPTION_KEYS["carwash_per_car"],
     "Maintenance expense per active car (monthly)",
-    "Driver subsistence allocation per operating car (monthly)",
-    "Incidental repair reserve per operating car (monthly)",
-    "Tracking device expense per operating car (monthly)",
+    "Driver subsistence",
+    "Incidental repair reserve",
+    "Tracking device expense",
     ASSUMPTION_KEYS["salary_per_car"],
     ASSUMPTION_KEYS["tax_rate"],
     ASSUMPTION_KEYS["car_unit_cost"],
@@ -203,45 +203,35 @@ def find_assumption_row(assumptions_ws, label: str):
 
 # Ensure required assumptions exist and force the new requested values.
 def ensure_required_assumptions(assumptions_ws):
-    # Define required overrides/additions based on user requirements.
-    required = {
-        "Maintenance expense per active car (monthly)": (1250, "N$ / car / month", "Updated requirement"),
-        "Airtime expense per operating car (monthly)": (290, "N$ / car / month", "Reduced requirement"),
-        "Driver subsistence allocation per operating car (monthly)": (1400, "N$ / car / month", "Cost of sales component"),
-        "Incidental repair reserve per operating car (monthly)": (500, "N$ / car / month", "Cost of sales component"),
-        "Tracking device expense per operating car (monthly)": (950, "N$ / car / month", "Cost of sales component"),
-    }
+    # Force row 6 content to the requested vehicle disposal trigger values.
+    assumptions_ws.cell(row=6, column=1, value="Vehicle disposal trigger")
+    assumptions_ws.cell(row=6, column=2, value=2)
+    assumptions_ws.cell(row=6, column=3, value="Years")
+    assumptions_ws.cell(row=6, column=4, value="car trigger for the disposal (with no disposal revenue) of all vehicles.")
 
-    # Process each required assumption one-by-one.
-    for label, (value, units, note) in required.items():
-        # Attempt to find existing row.
-        row = find_assumption_row(assumptions_ws, label)
-        # If row exists, update only value/units/note fields.
-        if row is not None:
-            assumptions_ws.cell(row=row, column=2, value=value)
-            assumptions_ws.cell(row=row, column=3, value=units)
-            assumptions_ws.cell(row=row, column=4, value=note)
-        else:
-            # If row does not exist, append at end of sheet.
-            new_row = assumptions_ws.max_row + 1
-            assumptions_ws.cell(row=new_row, column=1, value=label)
-            assumptions_ws.cell(row=new_row, column=2, value=value)
-            assumptions_ws.cell(row=new_row, column=3, value=units)
-            assumptions_ws.cell(row=new_row, column=4, value=note)
+    # Insert four rows at row 12, moving the existing row 12 and all rows below to row 16+.
+    assumptions_ws.insert_rows(12, amount=4)
 
-    # Build or refresh calculated cost-of-sales-per-car assumption.
-    cos_label = "Cost of sales per operating car (monthly)"
-    # Compute the assumed per-car cost of sales from direct-cost components.
-    cost_of_sales_per_car = 13000 + 290 + 240 + 1250 + 1400 + 500 + 950
-    # Find existing row for this calculated assumption.
-    cos_row = find_assumption_row(assumptions_ws, cos_label)
-    # Update existing row or append a new row.
-    target_row = cos_row if cos_row is not None else assumptions_ws.max_row + 1
-    # Write calculated assumption fields.
-    assumptions_ws.cell(row=target_row, column=1, value=cos_label)
-    assumptions_ws.cell(row=target_row, column=2, value=cost_of_sales_per_car)
-    assumptions_ws.cell(row=target_row, column=3, value="N$ / car / month")
-    assumptions_ws.cell(row=target_row, column=4, value="Calculated = Fuel + Airtime + Carwash + Maintenance + Driver Subsistence + Incidental Reserve + Tracking")
+    # Write the requested assumptions into rows 12-15.
+    assumptions_ws.cell(row=12, column=1, value="Driver subsistence")
+    assumptions_ws.cell(row=12, column=2, value=1400)
+    assumptions_ws.cell(row=12, column=3, value="N$ / car / month")
+    assumptions_ws.cell(row=12, column=4, value="For client upkeep")
+
+    assumptions_ws.cell(row=13, column=1, value="Incidental repair reserve")
+    assumptions_ws.cell(row=13, column=2, value=500)
+    assumptions_ws.cell(row=13, column=3, value="N$ / car / month")
+    assumptions_ws.cell(row=13, column=4, value="Internal repair insurance")
+
+    assumptions_ws.cell(row=14, column=1, value="Tracking device expense")
+    assumptions_ws.cell(row=14, column=2, value=950)
+    assumptions_ws.cell(row=14, column=3, value="N$ / car / month")
+    assumptions_ws.cell(row=14, column=4, value="Monthly payment for 3 year contract. 1 tracking device & 1 dashcam.")
+
+    assumptions_ws.cell(row=15, column=1, value="Cost of sales")
+    assumptions_ws.cell(row=15, column=2, value=None)
+    assumptions_ws.cell(row=15, column=3, value="N$ / car / month")
+    assumptions_ws.cell(row=15, column=4, value="fuel+airtime+carwash+maintenance+subsistence+repairs+tracking.")
 
 
 # Read assumptions from sheet into dictionary keyed by label.
@@ -342,9 +332,9 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         airtime_per_car=get(ASSUMPTION_KEYS["airtime_per_car"]),
         carwash_per_car=get(ASSUMPTION_KEYS["carwash_per_car"]),
         maintenance_per_car=get("Maintenance expense per active car (monthly)"),
-        driver_subsistence_per_car=get("Driver subsistence allocation per operating car (monthly)"),
-        incidental_repair_reserve_per_car=get("Incidental repair reserve per operating car (monthly)"),
-        tracking_device_per_car=get("Tracking device expense per operating car (monthly)"),
+        driver_subsistence_per_car=get("Driver subsistence"),
+        incidental_repair_reserve_per_car=get("Incidental repair reserve"),
+        tracking_device_per_car=get("Tracking device expense"),
         salary_per_car=get(ASSUMPTION_KEYS["salary_per_car"]),
         tax_rate=get(ASSUMPTION_KEYS["tax_rate"]),
         car_unit_cost=get(ASSUMPTION_KEYS["car_unit_cost"]),
