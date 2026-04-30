@@ -218,12 +218,30 @@ def normalize_assumptions_sheet_layout(assumptions_ws):
     # Move existing row 12 downward by four rows, shifting all following rows equally.
     assumptions_ws.insert_rows(12, amount=4)
 
-    # Move current rows 34-37 into the newly-created rows 12-15.
+    # Move source assumption rows into 12-15.
+    # Prefer the originally requested source block (rows 34-37, now shifted to 38-41
+    # after insertion), but fall back to the pre-insert rows 12-15 (now 16-19)
+    # when the workbook only has assumptions populated through row 33.
+    def row_has_content(row_idx: int) -> bool:
+        return any(
+            assumptions_ws.cell(row=row_idx, column=col).value not in (None, "")
+            for col in range(1, 5)
+        )
+
+    preferred_source_start = 38
+    fallback_source_start = 16
+
     for offset in range(4):
-        src_row = 34 + 4 + offset
+        preferred_row = preferred_source_start + offset
+        fallback_row = fallback_source_start + offset
+        src_row = preferred_row if row_has_content(preferred_row) else fallback_row
         dst_row = 12 + offset
         for col in range(1, 5):
-            assumptions_ws.cell(row=dst_row, column=col, value=assumptions_ws.cell(row=src_row, column=col).value)
+            assumptions_ws.cell(
+                row=dst_row,
+                column=col,
+                value=assumptions_ws.cell(row=src_row, column=col).value,
+            )
 
     # Apply requested labels and notes for amended rows 12-15 while preserving values/units.
     assumptions_ws.cell(row=12, column=1, value="Driver subsistence")
