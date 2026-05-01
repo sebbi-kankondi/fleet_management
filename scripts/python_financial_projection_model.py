@@ -203,6 +203,11 @@ def find_assumption_row(assumptions_ws, label: str):
 
 # Ensure required assumptions exist and force the new requested values.
 def ensure_required_assumptions(assumptions_ws):
+    # Delete any deprecated investor payout assumption row.
+    investor_payout_row = find_assumption_row(assumptions_ws, "Investor monthly payout per N$250,000 tranche")
+    if investor_payout_row is not None:
+        assumptions_ws.delete_rows(investor_payout_row, 1)
+
     # Keep key cost assumptions aligned with required overrides used in downstream calculations.
     for label, value in (
         (ASSUMPTION_KEYS["airtime_per_car"], 290),
@@ -303,6 +308,7 @@ def ensure_required_assumptions(assumptions_ws):
 
     # Total operating expense per car should only be salary.
     salary_value = float(assumptions_ws.cell(row=salary_row, column=2).value or 0.0)
+    assumptions_ws.cell(row=salary_row, column=2).number_format = '"N$" #,##0.00'
     assumptions_ws.cell(row=total_opex_row, column=2, value=salary_value)
     assumptions_ws.cell(row=total_opex_row, column=2).number_format = '"N$" #,##0.00'
 
@@ -312,14 +318,53 @@ def ensure_required_assumptions(assumptions_ws):
     assumptions_ws.cell(row=gross_profit_row, column=2, value=revenue_value - cost_of_sales_value)
     assumptions_ws.cell(row=gross_profit_row, column=2).number_format = '"N$" #,##0.00'
 
-    # Insert one empty row after total operating expenses and place Operating Profit in the new row.
-    assumptions_ws.insert_rows(total_opex_row + 1, amount=1)
-    operating_profit_row = total_opex_row + 1
-    assumptions_ws.cell(row=operating_profit_row, column=1, value="Operating Profit")
-    assumptions_ws.cell(row=operating_profit_row, column=2, value=(revenue_value - cost_of_sales_value) - salary_value)
-    assumptions_ws.cell(row=operating_profit_row, column=2).number_format = '"N$" #,##0.00'
-    assumptions_ws.cell(row=operating_profit_row, column=3, value="N$ / car / month")
-    assumptions_ws.cell(row=operating_profit_row, column=4, value="Gross profit - Value for Operating Expense.")
+    # Ensure there is no second Operating Profit assumption row.
+    first_operating_profit_row = None
+    for row in range(1, assumptions_ws.max_row + 1):
+        if assumptions_ws.cell(row=row, column=1).value == "Operating Profit":
+            if first_operating_profit_row is None:
+                first_operating_profit_row = row
+            else:
+                assumptions_ws.delete_rows(row, 1)
+                break
+
+    # Set Batch 2 investor payout start month to 8 when the row exists.
+    batch_2_payout_start_row = find_assumption_row(assumptions_ws, "Batch 2 investor payout start month")
+    if batch_2_payout_start_row is not None:
+        assumptions_ws.cell(row=batch_2_payout_start_row, column=2, value=8)
+        assumptions_ws.cell(row=batch_2_payout_start_row, column=2).number_format = "0"
+
+    # Set monthly bank interest rate from annual nominal rate / 12.
+    bank_annual_interest_row = find_assumption_row(assumptions_ws, "Bank nominal annual interest rate")
+    bank_monthly_interest_row = find_assumption_row(assumptions_ws, "Bank monthly interest rate")
+    if bank_annual_interest_row is not None and bank_monthly_interest_row is not None:
+        annual_cell = assumptions_ws.cell(row=bank_annual_interest_row, column=2).coordinate
+        assumptions_ws.cell(
+            row=bank_monthly_interest_row,
+            column=2,
+            value=f"={annual_cell}/12",
+        )
+        assumptions_ws.cell(row=bank_monthly_interest_row, column=2).number_format = "0.00%"
+
+    # Set bank instalment from PMT(monthly interest rate, loan term, loan draw batch 2).
+    bank_instalment_row = find_assumption_row(assumptions_ws, "Bank monthly instalment (principal + interest)")
+    bank_loan_term_row = find_assumption_row(assumptions_ws, "Bank loan term")
+    bank_draw_row = find_assumption_row(assumptions_ws, "Bank loan draw (batch 2)")
+    if (
+        bank_instalment_row is not None
+        and bank_monthly_interest_row is not None
+        and bank_loan_term_row is not None
+        and bank_draw_row is not None
+    ):
+        monthly_interest_cell = assumptions_ws.cell(row=bank_monthly_interest_row, column=2).coordinate
+        loan_term_cell = assumptions_ws.cell(row=bank_loan_term_row, column=2).coordinate
+        bank_draw_cell = assumptions_ws.cell(row=bank_draw_row, column=2).coordinate
+        assumptions_ws.cell(
+            row=bank_instalment_row,
+            column=2,
+            value=f"=-PMT({monthly_interest_cell},{loan_term_cell},{bank_draw_cell})",
+        )
+        assumptions_ws.cell(row=bank_instalment_row, column=2).number_format = '"N$" #,##0.00'
 
 
 # Read assumptions from sheet into dictionary keyed by label.
