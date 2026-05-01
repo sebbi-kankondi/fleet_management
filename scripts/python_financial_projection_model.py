@@ -318,15 +318,30 @@ def ensure_required_assumptions(assumptions_ws):
     assumptions_ws.cell(row=gross_profit_row, column=2, value=revenue_value - cost_of_sales_value)
     assumptions_ws.cell(row=gross_profit_row, column=2).number_format = '"N$" #,##0.00'
 
-    # Ensure there is no second Operating Profit assumption row.
-    first_operating_profit_row = None
-    for row in range(1, assumptions_ws.max_row + 1):
-        if assumptions_ws.cell(row=row, column=1).value == "Operating Profit":
-            if first_operating_profit_row is None:
-                first_operating_profit_row = row
-            else:
-                assumptions_ws.delete_rows(row, 1)
-                break
+    # Ensure there is exactly one Operating Profit assumption row.
+    operating_profit_rows = [
+        row
+        for row in range(1, assumptions_ws.max_row + 1)
+        if assumptions_ws.cell(row=row, column=1).value == "Operating Profit"
+    ]
+    if not operating_profit_rows:
+        assumptions_ws.insert_rows(total_opex_row + 1, amount=1)
+        operating_profit_row = total_opex_row + 1
+        assumptions_ws.cell(row=operating_profit_row, column=1, value="Operating Profit")
+        assumptions_ws.cell(row=operating_profit_row, column=3, value="N$ / car / month")
+        assumptions_ws.cell(
+            row=operating_profit_row,
+            column=4,
+            value="Gross profit - Value for Operating Expense.",
+        )
+        operating_profit_rows = [operating_profit_row]
+
+    for row in reversed(operating_profit_rows[1:]):
+        assumptions_ws.delete_rows(row, 1)
+
+    operating_profit_row = operating_profit_rows[0]
+    assumptions_ws.cell(row=operating_profit_row, column=2, value=(revenue_value - cost_of_sales_value) - salary_value)
+    assumptions_ws.cell(row=operating_profit_row, column=2).number_format = '"N$" #,##0.00'
 
     # Set Batch 2 investor payout start month to 8 when the row exists.
     batch_2_payout_start_row = find_assumption_row(assumptions_ws, "Batch 2 investor payout start month")
