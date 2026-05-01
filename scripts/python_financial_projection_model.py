@@ -208,6 +208,15 @@ def ensure_required_assumptions(assumptions_ws):
     if investor_payout_row is not None:
         assumptions_ws.delete_rows(investor_payout_row, 1)
 
+    # Delete deprecated monthly operating profit-per-car assumption rows.
+    for deprecated_label in (
+        "Assumption Monthly operating profit per car",
+        "Monthly operating profit per car",
+    ):
+        deprecated_row = find_assumption_row(assumptions_ws, deprecated_label)
+        if deprecated_row is not None:
+            assumptions_ws.delete_rows(deprecated_row, 1)
+
     # Keep key cost assumptions aligned with required overrides used in downstream calculations.
     for label, value in (
         (ASSUMPTION_KEYS["airtime_per_car"], 290),
