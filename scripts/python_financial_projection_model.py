@@ -36,6 +36,11 @@ ASSUMPTION_KEYS = {
     "car_unit_cost": "Car unit cost",
     # Financing assumptions.
     "owner_equity": "Initial owner/investor equity",
+    "owner_second_equity": "Owner/investor equity injection (batch 2)",
+    "owner_second_month": "Owner second injection month (operating month index)",
+    "initial_cars": "Initial cars in operation (month 1)",
+    "procurement_lead_time": "Procurement lead time",
+    "model_horizon": "Model horizon",
     "bank_draw": "Bank loan draw (batch 2)",
     "bank_draw_month": "Bank loan draw month (operating month index)",
     "bank_instalment": "Bank monthly instalment (principal + interest)",
@@ -57,6 +62,11 @@ REQUIRED_ASSUMPTION_LABELS = {
     ASSUMPTION_KEYS["tax_rate"],
     ASSUMPTION_KEYS["car_unit_cost"],
     ASSUMPTION_KEYS["owner_equity"],
+    ASSUMPTION_KEYS["owner_second_equity"],
+    ASSUMPTION_KEYS["owner_second_month"],
+    ASSUMPTION_KEYS["initial_cars"],
+    ASSUMPTION_KEYS["procurement_lead_time"],
+    ASSUMPTION_KEYS["model_horizon"],
     ASSUMPTION_KEYS["bank_draw"],
     ASSUMPTION_KEYS["bank_draw_month"],
     ASSUMPTION_KEYS["bank_instalment"],
@@ -83,6 +93,11 @@ class Assumptions:
     car_unit_cost: float
     # Financing assumptions.
     owner_equity: float
+    owner_second_equity: float
+    owner_second_month: int
+    initial_cars: int
+    procurement_lead_time: int
+    model_horizon: int
     bank_draw: float
     bank_draw_month: int
     bank_instalment: float
@@ -505,6 +520,11 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         tax_rate=get(ASSUMPTION_KEYS["tax_rate"]),
         car_unit_cost=get(ASSUMPTION_KEYS["car_unit_cost"]),
         owner_equity=get(ASSUMPTION_KEYS["owner_equity"]),
+        owner_second_equity=get(ASSUMPTION_KEYS["owner_second_equity"]),
+        owner_second_month=int(get(ASSUMPTION_KEYS["owner_second_month"])),
+        initial_cars=int(get(ASSUMPTION_KEYS["initial_cars"])),
+        procurement_lead_time=int(get(ASSUMPTION_KEYS["procurement_lead_time"])),
+        model_horizon=int(get(ASSUMPTION_KEYS["model_horizon"])),
         bank_draw=get(ASSUMPTION_KEYS["bank_draw"]),
         bank_draw_month=int(get(ASSUMPTION_KEYS["bank_draw_month"])),
         bank_instalment=get(ASSUMPTION_KEYS["bank_instalment"]),
@@ -595,6 +615,29 @@ def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
     # Return extracted fleet rows.
     return rows
 
+
+# Recalculate fleet schedule columns from purchases onward using assumptions.
+def recalculate_fleet_rows(a: Assumptions, source_rows: List[FleetRow]) -> List[FleetRow]:
+    months = a.model_horizon if a.model_horizon > 0 else len(source_rows)
+    purchases = {r.month: r.cars_purchased for r in source_rows}
+    rows: List[FleetRow] = []
+    deliveries_by_month: Dict[int, float] = {}
+    disposals_by_month: Dict[int, float] = {}
+    active = float(a.initial_cars)
+    cumulative_disposed = 0.0
+
+    for month in range(1, months + 1):
+        purchases_m = float(purchases.get(month, 0.0))
+        if purchases_m > 0 and a.procurement_lead_time > 0:
+            deliveries_by_month[month + a.procurement_lead_time] = deliveries_by_month.get(month + a.procurement_lead_time, 0.0) + purchases_m
+        deliveries = deliveries_by_month.get(month, 0.0)
+        if deliveries > 0:
+            disposals_by_month[month + 24] = disposals_by_month.get(month + 24, 0.0) + deliveries
+        disposals = disposals_by_month.get(month, 0.0)
+        active = max(0.0, active + deliveries - disposals)
+        cumulative_disposed += disposals
+        rows.append(FleetRow(month=month, year=((month - 1) // 12) + 1, cars_purchased=purchases_m, cars_in_operation=active))
+    return rows
 
 # Compute monthly cost-of-sales-per-car from assumptions.
 def cost_of_sales_per_car(a: Assumptions) -> float:
@@ -737,8 +780,8 @@ def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows
     out: List[CashFlowRow] = []
     # Iterate month-aligned fleet and income rows in lockstep.
     for fr, ir in zip(fleet_rows, income_rows):
-        # Set one-time owner injection in month 1.
-        owner_injection = a.owner_equity if fr.month == 1 else 0.0
+        # Initial owner equity is pre-operations; only second tranche is injected during operations.
+        owner_injection = a.owner_second_equity if fr.month == a.owner_second_month else 0.0
         # Set one-time bank draw in configured month.
         bank_draw = a.bank_draw if fr.month == a.bank_draw_month else 0.0
         # Compute total operating inflows as revenue plus financing injections.
@@ -820,6 +863,42 @@ def build_balance_rows(fleet_rows: List[FleetRow], cash_rows: List[CashFlowRow],
     # Return monthly balance rows.
     return out
 
+
+# Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
+def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
+    cumulative_in_operation = 0.0
+    deliveries_by_month: Dict[int, float] = {}
+    disposals_by_month: Dict[int, float] = {}
+    in_pipeline = 0.0
+    total_cars = float(a.initial_cars)
+    cumulative_disposed = 0.0
+
+    for row_idx, r in enumerate(rows, start=3):
+        deliveries_by_month[r.month + a.procurement_lead_time] = deliveries_by_month.get(r.month + a.procurement_lead_time, 0.0) + r.cars_purchased
+        deliveries = deliveries_by_month.get(r.month, 0.0)
+        if deliveries > 0:
+            disposals_by_month[r.month + 24] = disposals_by_month.get(r.month + 24, 0.0) + deliveries
+        disposals = disposals_by_month.get(r.month, 0.0)
+        in_pipeline = max(0.0, in_pipeline + r.cars_purchased - deliveries)
+        total_cars = max(0.0, total_cars + r.cars_purchased - disposals)
+        cumulative_in_operation += deliveries
+        if r.month == 1:
+            cumulative_in_operation = r.cars_in_operation
+        else:
+            cumulative_in_operation = max(cumulative_in_operation - disposals, r.cars_in_operation)
+        cumulative_disposed += disposals
+
+        ws.cell(row=row_idx, column=1, value=r.month)
+        ws.cell(row=row_idx, column=2, value=r.year)
+        ws.cell(row=row_idx, column=3, value=((r.month - 1) % 12) + 1)
+        ws.cell(row=row_idx, column=4, value=r.cars_purchased)
+        ws.cell(row=row_idx, column=5, value=deliveries)
+        ws.cell(row=row_idx, column=6, value=in_pipeline)
+        ws.cell(row=row_idx, column=7, value=r.cars_in_operation)
+        ws.cell(row=row_idx, column=8, value=total_cars)
+        ws.cell(row=row_idx, column=9, value=cumulative_in_operation)
+        ws.cell(row=row_idx, column=10, value=disposals)
+        ws.cell(row=row_idx, column=11, value=cumulative_disposed)
 
 # Rewrite Income_Statement sheet with explicit new columns and regenerated values.
 def write_income_statement(ws, rows: List[IncomeRow]):
@@ -1006,8 +1085,8 @@ def run_projection(input_path: Path, output_path: Path):
     # Convert assumptions into typed object.
     assumptions = build_assumptions(assumption_values)
 
-    # Read fleet schedule source rows.
-    fleet_rows = read_fleet_schedule(fleet_ws, fleet_values_ws)
+    # Read fleet schedule source rows and recalculate operational fleet dynamics.
+    fleet_rows = recalculate_fleet_rows(assumptions, read_fleet_schedule(fleet_ws, fleet_values_ws))
     # Build monthly income statement rows.
     income_rows = build_income_statement_rows(assumptions, fleet_rows)
     # Build loan amortisation rows using model horizon.
@@ -1023,6 +1102,7 @@ def run_projection(input_path: Path, output_path: Path):
     run_validations(income_rows, cash_rows, fleet_rows)
 
     # Write regenerated outputs back into workbook sheets.
+    write_fleet_schedule(fleet_ws, fleet_rows, assumptions)
     write_income_statement(income_ws, income_rows)
     write_cash_flow(cash_ws, cash_rows)
     write_loan_amortisation(loan_ws, loan_rows)
