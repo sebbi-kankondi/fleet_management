@@ -352,6 +352,15 @@ def ensure_required_assumptions(assumptions_ws):
     assumptions_ws.cell(row=operating_profit_row, column=2, value=(revenue_value - cost_of_sales_value) - salary_value)
     assumptions_ws.cell(row=operating_profit_row, column=2).number_format = '"N$" #,##0.00'
 
+    # Rename owner second injection month label when present.
+    owner_injection_month_row = find_assumption_row(assumptions_ws, "Assumption Owner injection month (operating month index)")
+    if owner_injection_month_row is not None:
+        assumptions_ws.cell(
+            row=owner_injection_month_row,
+            column=1,
+            value="Owner second injection month (operating month index)",
+        )
+
     # Set Batch 2 investor payout start month to 8 when the row exists.
     batch_2_payout_start_row = find_assumption_row(assumptions_ws, "Batch 2 investor payout start month")
     if batch_2_payout_start_row is not None:
