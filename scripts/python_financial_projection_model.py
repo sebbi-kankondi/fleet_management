@@ -824,10 +824,10 @@ def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows
 
 
 # Build balance sheet support rows from fleet, cash, income, and loan values.
-def build_balance_rows(fleet_rows: List[FleetRow], cash_rows: List[CashFlowRow], income_rows: List[IncomeRow], loan_map: Dict[int, LoanRow]) -> List[BalanceRow]:
+def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: List[CashFlowRow], income_rows: List[IncomeRow], loan_map: Dict[int, LoanRow]) -> List[BalanceRow]:
     # Initialize output list and cumulative trackers.
     out: List[BalanceRow] = []
-    cumulative_owner = 0.0
+    cumulative_owner = float(a.owner_equity)
     cumulative_cars = 0.0
     cumulative_capex = 0.0
     cumulative_revenue = 0.0
@@ -1096,7 +1096,7 @@ def run_projection(input_path: Path, output_path: Path):
     # Build monthly cash flow rows.
     cash_rows = build_cash_flow_rows(assumptions, fleet_rows, income_rows, loan_map)
     # Build balance sheet rows from model outputs.
-    balance_rows = build_balance_rows(fleet_rows, cash_rows, income_rows, loan_map)
+    balance_rows = build_balance_rows(a, fleet_rows, cash_rows, income_rows, loan_map)
 
     # Execute validation checks before writing output.
     run_validations(income_rows, cash_rows, fleet_rows)
