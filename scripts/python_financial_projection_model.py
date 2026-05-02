@@ -353,7 +353,7 @@ def ensure_required_assumptions(assumptions_ws):
     assumptions_ws.cell(row=operating_profit_row, column=2).number_format = '"N$" #,##0.00'
 
     # Rename owner second injection month label when present.
-    owner_injection_month_row = find_assumption_row(assumptions_ws, "Assumption Owner injection month (operating month index)")
+    owner_injection_month_row = find_assumption_row(assumptions_ws, "Owner injection month (operating month index)")
     if owner_injection_month_row is not None:
         assumptions_ws.cell(
             row=owner_injection_month_row,
