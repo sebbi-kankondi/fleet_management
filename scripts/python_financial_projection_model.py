@@ -628,8 +628,9 @@ def recalculate_fleet_rows(a: Assumptions, source_rows: List[FleetRow]) -> List[
 
     for month in range(1, months + 1):
         purchases_m = float(purchases.get(month, 0.0))
-        if purchases_m > 0 and a.procurement_lead_time > 0:
-            deliveries_by_month[month + a.procurement_lead_time] = deliveries_by_month.get(month + a.procurement_lead_time, 0.0) + purchases_m
+        if purchases_m > 0 and a.procurement_lead_time >= 0:
+            delivery_month = month + a.procurement_lead_time
+            deliveries_by_month[delivery_month] = deliveries_by_month.get(delivery_month, 0.0) + purchases_m
         deliveries = deliveries_by_month.get(month, 0.0)
         if deliveries > 0:
             disposals_by_month[month + 24] = disposals_by_month.get(month + 24, 0.0) + deliveries
