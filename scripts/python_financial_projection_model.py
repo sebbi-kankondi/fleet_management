@@ -631,6 +631,11 @@ def recalculate_fleet_rows(a: Assumptions, source_rows: List[FleetRow]) -> List[
     active = float(a.initial_cars)
     cumulative_disposed = 0.0
 
+    # Initial owner-funded fleet starts operating in month 1 and must also be disposed on the trigger horizon.
+    if disposal_lag_months > 0 and a.initial_cars > 0:
+        initial_disposal_month = 1 + disposal_lag_months
+        disposals_by_month[initial_disposal_month] = disposals_by_month.get(initial_disposal_month, 0.0) + float(a.initial_cars)
+
     for month in range(1, months + 1):
         purchases_m = float(purchases.get(month, 0.0))
         if purchases_m > 0 and a.procurement_lead_time >= 0:
@@ -880,6 +885,11 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
     in_pipeline = 0.0
     total_cars = float(a.initial_cars)
     cumulative_disposed = 0.0
+
+    # Initial owner-funded cars are already in operation at month 1 and should be disposed on trigger month.
+    if disposal_lag_months > 0 and a.initial_cars > 0:
+        initial_disposal_month = 1 + disposal_lag_months
+        disposals_by_month[initial_disposal_month] = disposals_by_month.get(initial_disposal_month, 0.0) + float(a.initial_cars)
 
     for row_idx, r in enumerate(rows, start=3):
         deliveries_by_month[r.month + a.procurement_lead_time] = deliveries_by_month.get(r.month + a.procurement_lead_time, 0.0) + r.cars_purchased
