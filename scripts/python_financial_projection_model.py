@@ -333,11 +333,12 @@ def ensure_required_assumptions(assumptions_ws):
     salary_row = insert_at + 1
     total_opex_row = insert_at + 2
 
-    # Total operating expense per car should only be salary.
+    # Total operating expenses per car should include Cost of sales plus Salary expense.
     salary_value = float(assumptions_ws.cell(row=salary_row, column=2).value or 0.0)
     assumptions_ws.cell(row=salary_row, column=2).number_format = '"N$" #,##0.00'
-    assumptions_ws.cell(row=total_opex_row, column=2, value=salary_value)
+    assumptions_ws.cell(row=total_opex_row, column=2, value=cost_of_sales_value + salary_value)
     assumptions_ws.cell(row=total_opex_row, column=2).number_format = '"N$" #,##0.00'
+    assumptions_ws.cell(row=total_opex_row, column=4, value='Calculated = Cost of sales + Salary expense per operating car (monthly).')
 
     # Monthly Gross profit per car should be monthly gross revenue per car minus cost of sales.
     revenue_row = find_assumption_row(assumptions_ws, ASSUMPTION_KEYS["monthly_gross_revenue_per_car"])
