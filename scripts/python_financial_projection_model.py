@@ -1097,7 +1097,7 @@ def run_projection(input_path: Path, output_path: Path):
     # Build monthly cash flow rows.
     cash_rows = build_cash_flow_rows(assumptions, fleet_rows, income_rows, loan_map)
     # Build balance sheet rows from model outputs.
-    balance_rows = build_balance_rows(a, fleet_rows, cash_rows, income_rows, loan_map)
+    balance_rows = build_balance_rows(assumptions, fleet_rows, cash_rows, income_rows, loan_map)
 
     # Execute validation checks before writing output.
     run_validations(income_rows, cash_rows, fleet_rows)
