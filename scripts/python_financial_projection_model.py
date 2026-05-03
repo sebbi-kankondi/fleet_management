@@ -45,6 +45,7 @@ ASSUMPTION_KEYS = {
     "bank_draw_month": "Bank loan draw month (operating month index)",
     "bank_instalment": "Bank monthly instalment (principal + interest)",
     "bank_annual_interest": "Bank nominal annual interest rate",
+    "vehicle_disposal_trigger": "Vehicle disposal trigger",
 }
 
 
@@ -71,6 +72,7 @@ REQUIRED_ASSUMPTION_LABELS = {
     ASSUMPTION_KEYS["bank_draw_month"],
     ASSUMPTION_KEYS["bank_instalment"],
     ASSUMPTION_KEYS["bank_annual_interest"],
+    ASSUMPTION_KEYS["vehicle_disposal_trigger"],
 }
 
 # Define a typed assumptions object so all downstream calculations consume consistent fields.
@@ -102,6 +104,7 @@ class Assumptions:
     bank_draw_month: int
     bank_instalment: float
     bank_annual_interest: float
+    vehicle_disposal_trigger_years: int
 
 
 # Define a typed record for fleet rows to avoid brittle index-based dictionary access.
@@ -529,6 +532,7 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         bank_draw_month=int(get(ASSUMPTION_KEYS["bank_draw_month"])),
         bank_instalment=get(ASSUMPTION_KEYS["bank_instalment"]),
         bank_annual_interest=get(ASSUMPTION_KEYS["bank_annual_interest"]),
+        vehicle_disposal_trigger_years=int(get(ASSUMPTION_KEYS["vehicle_disposal_trigger"])),
     )
 
 
@@ -619,6 +623,7 @@ def read_fleet_schedule(fleet_ws, fleet_values_ws=None) -> List[FleetRow]:
 # Recalculate fleet schedule columns from purchases onward using assumptions.
 def recalculate_fleet_rows(a: Assumptions, source_rows: List[FleetRow]) -> List[FleetRow]:
     months = a.model_horizon if a.model_horizon > 0 else len(source_rows)
+    disposal_lag_months = max(0, int(a.vehicle_disposal_trigger_years * 12))
     purchases = {r.month: r.cars_purchased for r in source_rows}
     rows: List[FleetRow] = []
     deliveries_by_month: Dict[int, float] = {}
@@ -632,8 +637,9 @@ def recalculate_fleet_rows(a: Assumptions, source_rows: List[FleetRow]) -> List[
             delivery_month = month + a.procurement_lead_time
             deliveries_by_month[delivery_month] = deliveries_by_month.get(delivery_month, 0.0) + purchases_m
         deliveries = deliveries_by_month.get(month, 0.0)
-        if deliveries > 0:
-            disposals_by_month[month + 24] = disposals_by_month.get(month + 24, 0.0) + deliveries
+        if deliveries > 0 and disposal_lag_months > 0:
+            disposal_month = month + disposal_lag_months
+            disposals_by_month[disposal_month] = disposals_by_month.get(disposal_month, 0.0) + deliveries
         disposals = disposals_by_month.get(month, 0.0)
         active = max(0.0, active + deliveries - disposals)
         cumulative_disposed += disposals
@@ -868,6 +874,7 @@ def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: Li
 # Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
 def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
     cumulative_in_operation = 0.0
+    disposal_lag_months = max(0, int(a.vehicle_disposal_trigger_years * 12))
     deliveries_by_month: Dict[int, float] = {}
     disposals_by_month: Dict[int, float] = {}
     in_pipeline = 0.0
@@ -877,8 +884,9 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
     for row_idx, r in enumerate(rows, start=3):
         deliveries_by_month[r.month + a.procurement_lead_time] = deliveries_by_month.get(r.month + a.procurement_lead_time, 0.0) + r.cars_purchased
         deliveries = deliveries_by_month.get(r.month, 0.0)
-        if deliveries > 0:
-            disposals_by_month[r.month + 24] = disposals_by_month.get(r.month + 24, 0.0) + deliveries
+        if deliveries > 0 and disposal_lag_months > 0:
+            disposal_month = r.month + disposal_lag_months
+            disposals_by_month[disposal_month] = disposals_by_month.get(disposal_month, 0.0) + deliveries
         disposals = disposals_by_month.get(r.month, 0.0)
         in_pipeline = max(0.0, in_pipeline + r.cars_purchased - deliveries)
         total_cars = max(0.0, total_cars + r.cars_purchased - disposals)
