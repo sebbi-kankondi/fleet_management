@@ -496,6 +496,28 @@ def read_assumption_values(assumptions_ws, assumptions_values_ws=None) -> Dict[s
             values[label_str] = parse_assumption_numeric(value)
         except ValueError as exc:
             raise ValueError(f"Could not parse assumption value for label '{label}' at row {row}: {value!r}") from exc
+
+    # If the instalment value is still missing (typically due to an unevaluated formula),
+    # calculate it from the same assumptions inputs used in the Assumptions sheet PMT formula.
+    bank_instalment_label = ASSUMPTION_KEYS["bank_instalment"]
+    if bank_instalment_label not in values:
+        annual_rate_label = ASSUMPTION_KEYS["bank_annual_interest"]
+        loan_term_label = "Bank loan term"
+        loan_draw_label = ASSUMPTION_KEYS["bank_draw"]
+        if (
+            annual_rate_label in values
+            and loan_term_label in values
+            and loan_draw_label in values
+        ):
+            monthly_rate = values[annual_rate_label] / 12.0
+            loan_term = int(values[loan_term_label])
+            loan_draw = values[loan_draw_label]
+            if loan_term > 0 and loan_draw > 0:
+                if abs(monthly_rate) < 1e-12:
+                    values[bank_instalment_label] = loan_draw / loan_term
+                else:
+                    growth = (1 + monthly_rate) ** loan_term
+                    values[bank_instalment_label] = loan_draw * (monthly_rate * growth) / (growth - 1)
     # Return mapping for downstream field extraction.
     return values
 
@@ -743,10 +765,12 @@ def build_loan_rows(a: Assumptions, months: int) -> List[LoanRow]:
         loan_month += 1
         # Compute monthly interest on opening balance.
         interest = balance * monthly_rate
-        # Compute principal as payment less interest, capped at outstanding balance.
-        principal = min(max(0.0, a.bank_instalment - interest), balance)
-        # Compute effective payment (may be lower in final month).
-        payment = interest + principal
+        # Use the Assumptions bank monthly instalment as the scheduled payment basis.
+        scheduled_payment = max(0.0, a.bank_instalment)
+        # Cap the payment in the final month so closing balance never goes below zero.
+        payment = min(scheduled_payment, balance + interest)
+        # Compute principal from the instalment payment split.
+        principal = min(max(0.0, payment - interest), balance)
         # Compute closing balance after payment.
         closing = max(0.0, balance - principal)
         # Append loan row rounded to currency precision.
