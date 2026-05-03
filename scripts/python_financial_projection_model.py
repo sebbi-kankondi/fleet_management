@@ -12,6 +12,8 @@ import argparse
 from dataclasses import dataclass
 # Import datetime to create default output filenames with timestamps.
 from datetime import datetime
+# Import math helpers for robust PMT-style instalment calculations.
+import math
 # Import pathlib.Path for safe, cross-platform filesystem path handling.
 from pathlib import Path
 # Import typing helpers to make function contracts explicit and easier to maintain.
@@ -389,16 +391,24 @@ def ensure_required_assumptions(assumptions_ws):
     # Set monthly bank interest rate from annual nominal rate / 12.
     bank_annual_interest_row = find_assumption_row(assumptions_ws, "Bank nominal annual interest rate")
     bank_monthly_interest_row = find_assumption_row(assumptions_ws, "Bank monthly interest rate")
+    monthly_interest_rate_value = None
     if bank_annual_interest_row is not None and bank_monthly_interest_row is not None:
-        annual_cell = assumptions_ws.cell(row=bank_annual_interest_row, column=2).coordinate
+        annual_rate_value = assumptions_ws.cell(row=bank_annual_interest_row, column=2).value
+        if isinstance(annual_rate_value, (int, float)):
+            monthly_interest_rate_value = float(annual_rate_value) / 12.0
+        else:
+            annual_rate_text = str(annual_rate_value).strip() if annual_rate_value is not None else ""
+            if annual_rate_text.endswith("%"):
+                monthly_interest_rate_value = (float(annual_rate_text.rstrip("%").strip()) / 100.0) / 12.0
         assumptions_ws.cell(
             row=bank_monthly_interest_row,
             column=2,
-            value=f"={annual_cell}/12",
+            value=monthly_interest_rate_value,
         )
         assumptions_ws.cell(row=bank_monthly_interest_row, column=2).number_format = "0.00%"
 
     # Set bank instalment from PMT(monthly interest rate, loan term, loan draw batch 2).
+    # Write a numeric value so downstream Python recalculations never depend on formula caches.
     bank_instalment_row = find_assumption_row(assumptions_ws, "Bank monthly instalment (principal + interest)")
     bank_loan_term_row = find_assumption_row(assumptions_ws, "Bank loan term")
     bank_draw_row = find_assumption_row(assumptions_ws, "Bank loan draw (batch 2)")
@@ -408,13 +418,27 @@ def ensure_required_assumptions(assumptions_ws):
         and bank_loan_term_row is not None
         and bank_draw_row is not None
     ):
-        monthly_interest_cell = assumptions_ws.cell(row=bank_monthly_interest_row, column=2).coordinate
-        loan_term_cell = assumptions_ws.cell(row=bank_loan_term_row, column=2).coordinate
-        bank_draw_cell = assumptions_ws.cell(row=bank_draw_row, column=2).coordinate
+        loan_term_value = assumptions_ws.cell(row=bank_loan_term_row, column=2).value
+        bank_draw_value = assumptions_ws.cell(row=bank_draw_row, column=2).value
+        instalment_value = None
+        if (
+            monthly_interest_rate_value is not None
+            and isinstance(loan_term_value, (int, float))
+            and isinstance(bank_draw_value, (int, float))
+            and float(loan_term_value) > 0
+            and float(bank_draw_value) > 0
+        ):
+            rate = float(monthly_interest_rate_value)
+            nper = int(float(loan_term_value))
+            principal = float(bank_draw_value)
+            if math.isclose(rate, 0.0, abs_tol=1e-12):
+                instalment_value = principal / nper
+            else:
+                instalment_value = (rate * principal) / (1.0 - math.pow(1.0 + rate, -nper))
         assumptions_ws.cell(
             row=bank_instalment_row,
             column=2,
-            value=f"=-PMT({monthly_interest_cell},{loan_term_cell},{bank_draw_cell})",
+            value=instalment_value,
         )
         assumptions_ws.cell(row=bank_instalment_row, column=2).number_format = '"N$" #,##0.00'
 
