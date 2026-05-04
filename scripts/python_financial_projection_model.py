@@ -104,6 +104,7 @@ class Assumptions:
     model_horizon: int
     bank_draw: float
     bank_draw_month: int
+    bank_payment_start_month: int
     bank_instalment: float
     bank_annual_interest: float
     bank_loan_term: int
@@ -556,6 +557,7 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         model_horizon=int(get(ASSUMPTION_KEYS["model_horizon"])),
         bank_draw=get(ASSUMPTION_KEYS["bank_draw"]),
         bank_draw_month=int(get(ASSUMPTION_KEYS["bank_draw_month"])),
+        bank_payment_start_month=int(assumption_values.get("Bank payment start month", get(ASSUMPTION_KEYS["bank_draw_month"]))),
         bank_instalment=get(ASSUMPTION_KEYS["bank_instalment"]),
         bank_annual_interest=get(ASSUMPTION_KEYS["bank_annual_interest"]),
         bank_loan_term=int(get(ASSUMPTION_KEYS["bank_loan_term"])),
@@ -747,129 +749,98 @@ def build_income_statement_rows(a: Assumptions, fleet_rows: List[FleetRow]) -> L
     return out
 
 
+
+
+# Resolve bank payment start month using explicit assumption when present, else draw month fallback.
+def get_bank_payment_start_month(a: Assumptions) -> int:
+    # Payment start month must be at least 1.
+    return max(1, int(getattr(a, "bank_payment_start_month", a.bank_draw_month) or a.bank_draw_month))
+
+
 # Build loan amortisation schedule for model horizon.
-def build_loan_rows(a: Assumptions, months: int) -> List[LoanRow]:
-    # Prepare list for amortisation output rows.
+def build_loan_rows(a: Assumptions, months: int, cash_rows: List[CashFlowRow]) -> List[LoanRow]:
+    # Rebuild amortisation rows from Cash_Flow Interest and Loan Principal values using payment start month alignment.
     rows: List[LoanRow] = []
-    # Initialize opening balance at zero before draw month.
-    balance = 0.0
-    # Compute monthly nominal rate from annual rate.
-    monthly_rate = a.bank_annual_interest / 12.0
-    # Keep separate loan-month index for amortisation table.
-    loan_month = 0
-    # Iterate over operating months.
-    for month in range(1, months + 1):
-        # Add loan draw in configured month.
-        if month == a.bank_draw_month:
-            balance += a.bank_draw
-        # If no outstanding balance, skip posting loan payment row.
-        if balance <= 0:
-            continue
-        # Stop scheduled repayments when the configured loan term is reached.
-        term_months = max(0, int(a.bank_loan_term))
-        if loan_month >= term_months:
-            continue
-        # Increment loan month once debt exists.
-        loan_month += 1
-        # Compute monthly interest on opening balance.
-        interest = balance * monthly_rate
-        # Use the Assumptions bank monthly instalment as the scheduled payment basis.
-        scheduled_payment = max(0.0, a.bank_instalment)
-        # Force a balloon settlement in the final scheduled term month so debt cannot remain outstanding.
-        if term_months > 0 and loan_month == term_months:
-            payment = balance + interest
-        # Otherwise, cap the payment so closing balance never goes below zero.
-        else:
-            payment = min(scheduled_payment, balance + interest)
-        # Compute principal from the instalment payment split.
-        principal = min(max(0.0, payment - interest), balance)
-        # Compute closing balance after payment.
-        closing = max(0.0, balance - principal)
-        # Append loan row rounded to currency precision.
-        rows.append(
-            LoanRow(
-                loan_month=loan_month,
-                opening_balance=r2(balance),
-                interest=r2(interest),
-                principal=r2(principal),
-                payment=r2(payment),
-                closing_balance=r2(closing),
-            )
-        )
-        # Roll closing to next month opening balance.
+    payment_start = get_bank_payment_start_month(a)
+    balance = float(a.bank_draw)
+    term_months = max(0, int(a.bank_loan_term))
+    for loan_month in range(1, term_months + 1):
+        operating_month = payment_start + loan_month - 1
+        if operating_month > months:
+            break
+        cash_row = cash_rows[operating_month - 1]
+        interest = max(0.0, float(cash_row.interest))
+        principal = max(0.0, min(float(cash_row.loan_principal), balance))
+        payment = interest + principal
+        opening = balance
+        closing = max(0.0, opening - principal)
+        rows.append(LoanRow(
+            loan_month=loan_month,
+            opening_balance=r2(opening),
+            interest=r2(interest),
+            principal=r2(principal),
+            payment=r2(payment),
+            closing_balance=r2(closing),
+        ))
         balance = closing
-    # Return amortisation rows.
     return rows
+
+
+# Build monthly cash flow rows tying income statement and debt schedule together.
+def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows: List[IncomeRow]) -> List[CashFlowRow]:
+    out: List[CashFlowRow] = []
+    monthly_rate = a.bank_annual_interest / 12.0
+    payment_start = get_bank_payment_start_month(a)
+    term_end_exclusive = payment_start + max(0, int(a.bank_loan_term))
+    opening_cash_balance = 0.0
+    opening_loan_balance = 0.0
+
+    for fr, ir in zip(fleet_rows, income_rows):
+        owner_injection = a.owner_second_equity if fr.month == a.owner_second_month else 0.0
+        bank_draw = a.bank_draw if fr.month == a.bank_draw_month else 0.0
+        opening_loan_balance += bank_draw
+        total_cash_in = ir.monthly_gross_revenue + owner_injection + bank_draw
+
+        in_payment_window = payment_start <= fr.month < term_end_exclusive
+        interest = (opening_loan_balance * monthly_rate) if in_payment_window else 0.0
+        principal = min(max(0.0, opening_loan_balance), max(0.0, a.bank_instalment - interest)) if in_payment_window else 0.0
+        closing_loan_balance = max(0.0, opening_loan_balance - principal)
+
+        operating_expenses = ir.cost_of_sales + ir.salary
+        income_tax_paid = ir.income_tax
+        investor_payout = 0.0
+        net_cash_before_capex = total_cash_in - operating_expenses - interest - principal - income_tax_paid - investor_payout
+        capex = fr.cars_purchased * a.car_unit_cost
+        net_cash_flow = net_cash_before_capex - capex
+
+        out.append(CashFlowRow(
+            month=fr.month,
+            owner_injection=r2(owner_injection),
+            bank_draw=r2(bank_draw),
+            total_cash_in=r2(total_cash_in),
+            operating_expenses_cash=r2(operating_expenses),
+            interest=r2(interest),
+            loan_principal=r2(principal),
+            income_tax_paid=r2(income_tax_paid),
+            investor_payout=r2(investor_payout),
+            net_cash_before_capex=r2(net_cash_before_capex),
+            capex=r2(capex),
+            net_cash_flow=r2(net_cash_flow),
+        ))
+        opening_cash_balance = net_cash_before_capex
+        opening_loan_balance = closing_loan_balance
+    return out
 
 
 # Create a month-index map for quick loan lookup by operating month.
 def map_loan_by_operating_month(a: Assumptions, months: int, loan_rows: List[LoanRow]) -> Dict[int, LoanRow]:
-    # Initialize output dictionary.
     mapping: Dict[int, LoanRow] = {}
-    # Track pointer into loan rows.
-    lr_idx = 0
-    # Track whether loan has started.
-    started = False
-    # Iterate operating months.
-    for m in range(1, months + 1):
-        # Start mapping at draw month.
-        if m == a.bank_draw_month:
-            started = True
-        # If loan active and row exists, map month to row.
-        if started and lr_idx < len(loan_rows):
-            mapping[m] = loan_rows[lr_idx]
-            lr_idx += 1
-    # Return month-to-loan-row map.
+    payment_start = get_bank_payment_start_month(a)
+    for lr in loan_rows:
+        operating_month = payment_start + lr.loan_month - 1
+        if 1 <= operating_month <= months:
+            mapping[operating_month] = lr
     return mapping
-
-
-# Build monthly cash flow rows tying income statement and debt schedule together.
-def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows: List[IncomeRow], loan_map: Dict[int, LoanRow]) -> List[CashFlowRow]:
-    # Prepare cash flow output list.
-    out: List[CashFlowRow] = []
-    # Iterate month-aligned fleet and income rows in lockstep.
-    for fr, ir in zip(fleet_rows, income_rows):
-        # Initial owner equity is pre-operations; only second tranche is injected during operations.
-        owner_injection = a.owner_second_equity if fr.month == a.owner_second_month else 0.0
-        # Set one-time bank draw in configured month.
-        bank_draw = a.bank_draw if fr.month == a.bank_draw_month else 0.0
-        # Compute total operating inflows as revenue plus financing injections.
-        total_cash_in = ir.monthly_gross_revenue + owner_injection + bank_draw
-        # Load loan values for current month if loan is active.
-        loan_row = loan_map.get(fr.month)
-        interest = loan_row.interest if loan_row else 0.0
-        principal = loan_row.principal if loan_row else 0.0
-        # Define operating cash expenses as Cost of Sales + salary.
-        operating_expenses = ir.cost_of_sales + ir.salary
-        # Define tax as current-month computed tax expense.
-        income_tax_paid = ir.income_tax
-        # Placeholder investor payout policy set to zero for deterministic generation.
-        investor_payout = 0.0
-        # Compute net cash before capex.
-        net_cash_before_capex = total_cash_in - operating_expenses - interest - principal - income_tax_paid - investor_payout
-        # Compute capex from monthly purchases * unit cost.
-        capex = fr.cars_purchased * a.car_unit_cost
-        # Compute net cash flow after capex.
-        net_cash_flow = net_cash_before_capex - capex
-        # Append typed monthly cash flow row.
-        out.append(
-            CashFlowRow(
-                month=fr.month,
-                owner_injection=r2(owner_injection),
-                bank_draw=r2(bank_draw),
-                total_cash_in=r2(total_cash_in),
-                operating_expenses_cash=r2(operating_expenses),
-                interest=r2(interest),
-                loan_principal=r2(principal),
-                income_tax_paid=r2(income_tax_paid),
-                investor_payout=r2(investor_payout),
-                net_cash_before_capex=r2(net_cash_before_capex),
-                capex=r2(capex),
-                net_cash_flow=r2(net_cash_flow),
-            )
-        )
-    # Return computed cash flow rows.
-    return out
 
 
 # Build balance sheet support rows from fleet, cash, income, and loan values.
@@ -1145,12 +1116,12 @@ def run_projection(input_path: Path, output_path: Path):
     fleet_rows = recalculate_fleet_rows(assumptions, read_fleet_schedule(fleet_ws, fleet_values_ws))
     # Build monthly income statement rows.
     income_rows = build_income_statement_rows(assumptions, fleet_rows)
-    # Build loan amortisation rows using model horizon.
-    loan_rows = build_loan_rows(assumptions, len(fleet_rows))
+    # Build monthly cash flow rows using required Interest/Loan Principal formulas.
+    cash_rows = build_cash_flow_rows(assumptions, fleet_rows, income_rows)
+    # Build loan amortisation rows from cash flow Interest/Loan Principal values.
+    loan_rows = build_loan_rows(assumptions, len(fleet_rows), cash_rows)
     # Create month-to-loan lookup map.
     loan_map = map_loan_by_operating_month(assumptions, len(fleet_rows), loan_rows)
-    # Build monthly cash flow rows.
-    cash_rows = build_cash_flow_rows(assumptions, fleet_rows, income_rows, loan_map)
     # Build balance sheet rows from model outputs.
     balance_rows = build_balance_rows(assumptions, fleet_rows, cash_rows, income_rows, loan_map)
 
