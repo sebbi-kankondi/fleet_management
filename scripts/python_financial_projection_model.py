@@ -223,6 +223,14 @@ def find_assumption_row(assumptions_ws, label: str):
     return None
 
 
+# Build an absolute Assumptions sheet cell reference for a required label's value cell.
+def assumption_value_cell_ref(assumptions_ws, label: str) -> str:
+    row = find_assumption_row(assumptions_ws, label)
+    if row is None:
+        raise KeyError(f"Missing required assumption row for formula reference: {label}")
+    return f"Assumptions!$B${row}"
+
+
 # Ensure required assumptions exist and force the new requested values.
 def ensure_required_assumptions(assumptions_ws):
     # Delete any deprecated investor payout assumption row.
@@ -977,7 +985,7 @@ def write_income_statement(ws, rows: List[IncomeRow]):
 
 
 # Rewrite Cash_Flow sheet with regenerated values and operating expense tie-outs.
-def write_cash_flow(ws, rows: List[CashFlowRow]):
+def write_cash_flow(ws, rows: List[CashFlowRow], assumption_refs: Dict[str, str]):
     # Write headers to row 2.
     headers = [
         "Month #",
@@ -1004,9 +1012,13 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
         ws.cell(row=row_idx, column=3, value=r.bank_draw)
         ws.cell(row=row_idx, column=4, value=r.total_cash_in)
         ws.cell(row=row_idx, column=5, value=r.operating_expenses_cash)
+        bank_payment_start_ref = assumption_refs["bank_payment_start_month"]
+        bank_loan_term_ref = assumption_refs["bank_loan_term"]
+        bank_monthly_interest_ref = assumption_refs["bank_monthly_interest_rate"]
+        bank_instalment_ref = assumption_refs["bank_instalment"]
         outstanding_balance_expr = f"(Assumptions!$B$18+SUM($C$3:C{row_idx})-SUM($G$3:G{row_idx-1}))"
-        ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$28,$A{row_idx}<Assumptions!$B$28+Assumptions!$B$26),{outstanding_balance_expr}*Assumptions!$B$27,0)")
-        ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$28,$A{row_idx}<Assumptions!$B$28+Assumptions!$B$26),MIN({outstanding_balance_expr},Assumptions!$B$20-$F{row_idx}),0)")
+        ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>={bank_payment_start_ref},$A{row_idx}<{bank_payment_start_ref}+{bank_loan_term_ref}),{outstanding_balance_expr}*{bank_monthly_interest_ref},0)")
+        ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>={bank_payment_start_ref},$A{row_idx}<{bank_payment_start_ref}+{bank_loan_term_ref}),MIN({outstanding_balance_expr},{bank_instalment_ref}-$F{row_idx}),0)")
         ws.cell(row=row_idx, column=8, value=r.income_tax_paid)
         ws.cell(row=row_idx, column=9, value=r.investor_payout)
         ws.cell(row=row_idx, column=10, value=f"=D{row_idx}-E{row_idx}-F{row_idx}-G{row_idx}-H{row_idx}-I{row_idx}")
@@ -1015,7 +1027,7 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
 
 
 # Rewrite Loan_Amortisation sheet with regenerated schedule rows.
-def write_loan_amortisation(ws, rows: List[LoanRow]):
+def write_loan_amortisation(ws, rows: List[LoanRow], assumption_refs: Dict[str, str]):
     # Write standard headers in row 4 to align with template layout.
     headers = ["Loan month", "Opening balance", "Interest", "Principal", "Payment", "Closing balance"]
     # Populate headers.
@@ -1026,8 +1038,9 @@ def write_loan_amortisation(ws, rows: List[LoanRow]):
     for row_idx, r in enumerate(rows, start=5):
         ws.cell(row=row_idx, column=1, value=r.loan_month)
         ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$18" if row_idx == 5 else f"=F{row_idx-1}"))
-        ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
-        ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
+        bank_payment_start_ref = assumption_refs["bank_payment_start_month"]
+        ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH({bank_payment_start_ref}+A{row_idx}-1,Cash_Flow!$A:$A,0))")
+        ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH({bank_payment_start_ref}+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=5, value=f"=C{row_idx}+D{row_idx}")
         ws.cell(row=row_idx, column=6, value=f"=MAX(0,B{row_idx}-D{row_idx})")
 
@@ -1112,6 +1125,12 @@ def run_projection(input_path: Path, output_path: Path):
     assumption_values = read_assumption_values(assumptions_ws, assumptions_values_ws)
     # Convert assumptions into typed object.
     assumptions = build_assumptions(assumption_values)
+    assumption_refs = {
+        "bank_payment_start_month": assumption_value_cell_ref(assumptions_ws, "Bank payment start month"),
+        "bank_loan_term": assumption_value_cell_ref(assumptions_ws, ASSUMPTION_KEYS["bank_loan_term"]),
+        "bank_monthly_interest_rate": assumption_value_cell_ref(assumptions_ws, "Bank monthly interest rate"),
+        "bank_instalment": assumption_value_cell_ref(assumptions_ws, ASSUMPTION_KEYS["bank_instalment"]),
+    }
 
     # Read fleet schedule source rows and recalculate operational fleet dynamics.
     fleet_rows = recalculate_fleet_rows(assumptions, read_fleet_schedule(fleet_ws, fleet_values_ws))
@@ -1132,8 +1151,8 @@ def run_projection(input_path: Path, output_path: Path):
     # Write regenerated outputs back into workbook sheets.
     write_fleet_schedule(fleet_ws, fleet_rows, assumptions)
     write_income_statement(income_ws, income_rows)
-    write_cash_flow(cash_ws, cash_rows)
-    write_loan_amortisation(loan_ws, loan_rows)
+    write_cash_flow(cash_ws, cash_rows, assumption_refs)
+    write_loan_amortisation(loan_ws, loan_rows, assumption_refs)
     write_balance_sheet(balance_ws, balance_rows)
 
     # Save completed workbook to output path.
