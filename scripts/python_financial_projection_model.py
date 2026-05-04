@@ -1011,8 +1011,8 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
             row=row_idx,
             column=9,
             value=(
-                f"=IF(AND($A{row_idx}>=Assumptions!$B$36,$A{row_idx}<Assumptions!$B$36+Assumptions!$B$31),"
-                f"(Assumptions!$B$23/Assumptions!$B$4)*Assumptions!$B$34,ROUND(0,0))"
+                f"=IF($A{row_idx}<Assumptions!$B$36,Assumptions!$B$34*Fleet_Schedule!$G{row_idx},"
+                f"ROUND(Assumptions!$B$34*(Fleet_Schedule!$G{row_idx}-(Assumptions!$B$23/Assumptions!$B$4)),0))"
             ),
         )
         ws.cell(row=row_idx, column=10, value=f"=D{row_idx}-E{row_idx}-F{row_idx}-G{row_idx}-H{row_idx}-I{row_idx}")
