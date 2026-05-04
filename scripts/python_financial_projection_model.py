@@ -45,6 +45,7 @@ ASSUMPTION_KEYS = {
     "bank_draw_month": "Bank loan draw month (operating month index)",
     "bank_instalment": "Bank monthly instalment (principal + interest)",
     "bank_annual_interest": "Bank nominal annual interest rate",
+    "bank_loan_term": "Bank loan term",
     "vehicle_disposal_trigger": "Vehicle disposal trigger",
 }
 
@@ -72,6 +73,7 @@ REQUIRED_ASSUMPTION_LABELS = {
     ASSUMPTION_KEYS["bank_draw_month"],
     ASSUMPTION_KEYS["bank_instalment"],
     ASSUMPTION_KEYS["bank_annual_interest"],
+    ASSUMPTION_KEYS["bank_loan_term"],
     ASSUMPTION_KEYS["vehicle_disposal_trigger"],
 }
 
@@ -104,6 +106,7 @@ class Assumptions:
     bank_draw_month: int
     bank_instalment: float
     bank_annual_interest: float
+    bank_loan_term: int
     vehicle_disposal_trigger_years: int
 
 
@@ -502,7 +505,7 @@ def read_assumption_values(assumptions_ws, assumptions_values_ws=None) -> Dict[s
     bank_instalment_label = ASSUMPTION_KEYS["bank_instalment"]
     if bank_instalment_label not in values:
         annual_rate_label = ASSUMPTION_KEYS["bank_annual_interest"]
-        loan_term_label = "Bank loan term"
+        loan_term_label = ASSUMPTION_KEYS["bank_loan_term"]
         loan_draw_label = ASSUMPTION_KEYS["bank_draw"]
         if (
             annual_rate_label in values
@@ -555,6 +558,7 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         bank_draw_month=int(get(ASSUMPTION_KEYS["bank_draw_month"])),
         bank_instalment=get(ASSUMPTION_KEYS["bank_instalment"]),
         bank_annual_interest=get(ASSUMPTION_KEYS["bank_annual_interest"]),
+        bank_loan_term=int(get(ASSUMPTION_KEYS["bank_loan_term"])),
         vehicle_disposal_trigger_years=int(get(ASSUMPTION_KEYS["vehicle_disposal_trigger"])),
     )
 
@@ -760,6 +764,9 @@ def build_loan_rows(a: Assumptions, months: int) -> List[LoanRow]:
             balance += a.bank_draw
         # If no outstanding balance, skip posting loan payment row.
         if balance <= 0:
+            continue
+        # Stop scheduled repayments when the configured loan term is reached.
+        if loan_month >= max(0, int(a.bank_loan_term)):
             continue
         # Increment loan month once debt exists.
         loan_month += 1
