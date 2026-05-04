@@ -1004,13 +1004,14 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
         ws.cell(row=row_idx, column=3, value=r.bank_draw)
         ws.cell(row=row_idx, column=4, value=r.total_cash_in)
         ws.cell(row=row_idx, column=5, value=r.operating_expenses_cash)
-        ws.cell(row=row_idx, column=6, value=r.interest)
-        ws.cell(row=row_idx, column=7, value=r.loan_principal)
+        outstanding_balance_expr = f"(Assumptions!$B$18+SUM($C$3:C{row_idx})-SUM($G$3:G{row_idx-1}))"
+        ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$28,$A{row_idx}<Assumptions!$B$28+Assumptions!$B$26),{outstanding_balance_expr}*Assumptions!$B$27,0)")
+        ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$28,$A{row_idx}<Assumptions!$B$28+Assumptions!$B$26),MIN({outstanding_balance_expr},Assumptions!$B$20-$F{row_idx}),0)")
         ws.cell(row=row_idx, column=8, value=r.income_tax_paid)
         ws.cell(row=row_idx, column=9, value=r.investor_payout)
-        ws.cell(row=row_idx, column=10, value=r.net_cash_before_capex)
+        ws.cell(row=row_idx, column=10, value=f"=D{row_idx}-E{row_idx}-F{row_idx}-G{row_idx}-H{row_idx}-I{row_idx}")
         ws.cell(row=row_idx, column=11, value=r.capex)
-        ws.cell(row=row_idx, column=12, value=r.net_cash_flow)
+        ws.cell(row=row_idx, column=12, value=f"=J{row_idx}-K{row_idx}")
 
 
 # Rewrite Loan_Amortisation sheet with regenerated schedule rows.
@@ -1024,11 +1025,11 @@ def write_loan_amortisation(ws, rows: List[LoanRow]):
     # Write loan rows starting at row 5.
     for row_idx, r in enumerate(rows, start=5):
         ws.cell(row=row_idx, column=1, value=r.loan_month)
-        ws.cell(row=row_idx, column=2, value=r.opening_balance)
-        ws.cell(row=row_idx, column=3, value=r.interest)
-        ws.cell(row=row_idx, column=4, value=r.principal)
-        ws.cell(row=row_idx, column=5, value=r.payment)
-        ws.cell(row=row_idx, column=6, value=r.closing_balance)
+        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$18" if row_idx == 5 else f"=F{row_idx-1}"))
+        ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
+        ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
+        ws.cell(row=row_idx, column=5, value=f"=C{row_idx}+D{row_idx}")
+        ws.cell(row=row_idx, column=6, value=f"=MAX(0,B{row_idx}-D{row_idx})")
 
 
 # Rewrite Balance_Sheet with regenerated support metrics.
