@@ -766,7 +766,8 @@ def build_loan_rows(a: Assumptions, months: int) -> List[LoanRow]:
         if balance <= 0:
             continue
         # Stop scheduled repayments when the configured loan term is reached.
-        if loan_month >= max(0, int(a.bank_loan_term)):
+        term_months = max(0, int(a.bank_loan_term))
+        if loan_month >= term_months:
             continue
         # Increment loan month once debt exists.
         loan_month += 1
@@ -774,8 +775,12 @@ def build_loan_rows(a: Assumptions, months: int) -> List[LoanRow]:
         interest = balance * monthly_rate
         # Use the Assumptions bank monthly instalment as the scheduled payment basis.
         scheduled_payment = max(0.0, a.bank_instalment)
-        # Cap the payment in the final month so closing balance never goes below zero.
-        payment = min(scheduled_payment, balance + interest)
+        # Force a balloon settlement in the final scheduled term month so debt cannot remain outstanding.
+        if term_months > 0 and loan_month == term_months:
+            payment = balance + interest
+        # Otherwise, cap the payment so closing balance never goes below zero.
+        else:
+            payment = min(scheduled_payment, balance + interest)
         # Compute principal from the instalment payment split.
         principal = min(max(0.0, payment - interest), balance)
         # Compute closing balance after payment.
