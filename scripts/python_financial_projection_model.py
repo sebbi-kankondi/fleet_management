@@ -557,7 +557,7 @@ def build_assumptions(assumption_values: Dict[str, float]) -> Assumptions:
         model_horizon=int(get(ASSUMPTION_KEYS["model_horizon"])),
         bank_draw=get(ASSUMPTION_KEYS["bank_draw"]),
         bank_draw_month=int(get(ASSUMPTION_KEYS["bank_draw_month"])),
-        bank_payment_start_month=int(values.get("Bank payment start month", get(ASSUMPTION_KEYS["bank_draw_month"]))),
+        bank_payment_start_month=int(assumption_values.get("Bank payment start month", get(ASSUMPTION_KEYS["bank_draw_month"]))),
         bank_instalment=get(ASSUMPTION_KEYS["bank_instalment"]),
         bank_annual_interest=get(ASSUMPTION_KEYS["bank_annual_interest"]),
         bank_loan_term=int(get(ASSUMPTION_KEYS["bank_loan_term"])),
