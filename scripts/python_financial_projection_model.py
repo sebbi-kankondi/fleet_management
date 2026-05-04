@@ -1063,8 +1063,8 @@ def write_balance_sheet(ws, rows: List[BalanceRow]):
     for row_idx, r in enumerate(rows, start=3):
         ws.cell(row=row_idx, column=1, value=r.year)
         ws.cell(row=row_idx, column=2, value=r.month)
-        ws.cell(row=row_idx, column=3, value=r.total_owner_capital_invested)
-        ws.cell(row=row_idx, column=4, value=r.net_owner_capital_outstanding)
+        ws.cell(row=row_idx, column=3, value=f"=IF($A{row_idx}>1,0,Assumptions!$B$22+IF($B{row_idx}>4,Assumptions!$B$27,0))")
+        ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$22 + Assumptions!$B$23),0,IF($B{row_idx}>4,(Assumptions!$B$22+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$22-$U{row_idx}))")
         ws.cell(row=row_idx, column=5, value=r.loan_closing_balance)
         ws.cell(row=row_idx, column=6, value=r.cars_in_operation)
         ws.cell(row=row_idx, column=7, value=r.total_cars_operation_cumulative)
