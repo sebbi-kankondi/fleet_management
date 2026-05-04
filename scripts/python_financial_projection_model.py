@@ -793,15 +793,18 @@ def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows
     payment_start = get_bank_payment_start_month(a)
     term_end_exclusive = payment_start + max(0, int(a.bank_loan_term))
     opening_cash_balance = 0.0
+    opening_loan_balance = 0.0
 
     for fr, ir in zip(fleet_rows, income_rows):
         owner_injection = a.owner_second_equity if fr.month == a.owner_second_month else 0.0
         bank_draw = a.bank_draw if fr.month == a.bank_draw_month else 0.0
+        opening_loan_balance += bank_draw
         total_cash_in = ir.monthly_gross_revenue + owner_injection + bank_draw
 
         in_payment_window = payment_start <= fr.month < term_end_exclusive
-        interest = ((opening_cash_balance + bank_draw) * monthly_rate) if in_payment_window else 0.0
-        principal = min(max(0.0, opening_cash_balance + bank_draw), max(0.0, a.bank_instalment - interest)) if in_payment_window else 0.0
+        interest = (opening_loan_balance * monthly_rate) if in_payment_window else 0.0
+        principal = min(max(0.0, opening_loan_balance), max(0.0, a.bank_instalment - interest)) if in_payment_window else 0.0
+        closing_loan_balance = max(0.0, opening_loan_balance - principal)
 
         operating_expenses = ir.cost_of_sales + ir.salary
         income_tax_paid = ir.income_tax
@@ -825,6 +828,7 @@ def build_cash_flow_rows(a: Assumptions, fleet_rows: List[FleetRow], income_rows
             net_cash_flow=r2(net_cash_flow),
         ))
         opening_cash_balance = net_cash_before_capex
+        opening_loan_balance = closing_loan_balance
     return out
 
 
