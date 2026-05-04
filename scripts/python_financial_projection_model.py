@@ -1007,7 +1007,14 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
         ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$33,$A{row_idx}<Assumptions!$B$33+Assumptions!$B$31),($O{row_idx}+$C{row_idx})*Assumptions!$B$32,0)")
         ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$33,$A{row_idx}<Assumptions!$B$33+Assumptions!$B$31),MIN(($O{row_idx}+$C{row_idx}),Assumptions!$B$25-$F{row_idx}),0)")
         ws.cell(row=row_idx, column=8, value=r.income_tax_paid)
-        ws.cell(row=row_idx, column=9, value=r.investor_payout)
+        ws.cell(
+            row=row_idx,
+            column=9,
+            value=(
+                f"=IF(AND($A{row_idx}>=Assumptions!$B$36,$A{row_idx}<Assumptions!$B$36+Assumptions!$B$31),"
+                f"(Assumptions!$B$23/Assumptions!$B$4)*Assumptions!$B$34,ROUND(0,0))"
+            ),
+        )
         ws.cell(row=row_idx, column=10, value=f"=D{row_idx}-E{row_idx}-F{row_idx}-G{row_idx}-H{row_idx}-I{row_idx}")
         ws.cell(row=row_idx, column=11, value=r.capex)
         ws.cell(row=row_idx, column=12, value=f"=J{row_idx}-K{row_idx}")
