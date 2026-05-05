@@ -887,11 +887,14 @@ def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: Li
 
 # Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
 def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
-    formula_templates: Dict[int, str] = {}
+    formula_templates: Dict[int, Dict[str, str]] = {}
     for col_idx in range(4, ws.max_column + 1):
-        template = ws.cell(row=3, column=col_idx).value
-        if isinstance(template, str) and template.startswith("="):
-            formula_templates[col_idx] = template
+        first_row_formula = ws.cell(row=3, column=col_idx).value
+        following_row_formula = ws.cell(row=4, column=col_idx).value
+        if isinstance(first_row_formula, str) and first_row_formula.startswith("="):
+            formula_templates[col_idx] = {"first": first_row_formula}
+            if isinstance(following_row_formula, str) and following_row_formula.startswith("="):
+                formula_templates[col_idx]["rest"] = following_row_formula
 
     cumulative_in_operation = 0.0
     disposal_lag_months = max(0, int(a.vehicle_disposal_trigger_years * 12))
@@ -929,10 +932,15 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
             if col_idx == 9:
                 continue
             if col_idx in formula_templates:
+                template = formula_templates[col_idx]["first"]
+                origin = "A3"
+                if row_idx > 3 and "rest" in formula_templates[col_idx]:
+                    template = formula_templates[col_idx]["rest"]
+                    origin = "A4"
                 ws.cell(
                     row=row_idx,
                     column=col_idx,
-                    value=Translator(formula_templates[col_idx], origin="A3").translate_formula(f"A{row_idx}"),
+                    value=Translator(template, origin=origin).translate_formula(f"A{row_idx}"),
                 )
 
         if row_idx == 3:
