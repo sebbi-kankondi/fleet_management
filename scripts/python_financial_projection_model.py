@@ -19,6 +19,7 @@ from typing import Dict, List
 
 # Import openpyxl workbook loader; this is the core Excel IO dependency for reading/writing sheets.
 from openpyxl import load_workbook
+from openpyxl.formula.translate import Translator
 
 
 # Map assumptions by exact label text used in the workbook Assumptions column A.
@@ -886,6 +887,12 @@ def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: Li
 
 # Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
 def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
+    formula_templates: Dict[int, str] = {}
+    for col_idx in range(4, ws.max_column + 1):
+        template = ws.cell(row=3, column=col_idx).value
+        if isinstance(template, str) and template.startswith("="):
+            formula_templates[col_idx] = template
+
     cumulative_in_operation = 0.0
     disposal_lag_months = max(0, int(a.vehicle_disposal_trigger_years * 12))
     deliveries_by_month: Dict[int, float] = {}
@@ -918,17 +925,20 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
         ws.cell(row=row_idx, column=1, value=r.month)
         ws.cell(row=row_idx, column=2, value=r.year)
         ws.cell(row=row_idx, column=3, value=((r.month - 1) % 12) + 1)
-        ws.cell(row=row_idx, column=4, value=r.cars_purchased)
-        ws.cell(row=row_idx, column=5, value=deliveries)
-        ws.cell(row=row_idx, column=6, value=in_pipeline)
-        ws.cell(row=row_idx, column=7, value=r.cars_in_operation)
-        ws.cell(row=row_idx, column=8, value=total_cars)
+        for col_idx in range(4, ws.max_column + 1):
+            if col_idx == 9:
+                continue
+            if col_idx in formula_templates:
+                ws.cell(
+                    row=row_idx,
+                    column=col_idx,
+                    value=Translator(formula_templates[col_idx], origin="A3").translate_formula(f"A{row_idx}"),
+                )
+
         if row_idx == 3:
             ws.cell(row=row_idx, column=9, value="=Assumptions!$B$29")
         else:
             ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
-        ws.cell(row=row_idx, column=10, value=disposals)
-        ws.cell(row=row_idx, column=11, value=cumulative_disposed)
 
 # Rewrite Income_Statement sheet with explicit new columns and regenerated values.
 def write_income_statement(ws, rows: List[IncomeRow]):
@@ -1034,7 +1044,7 @@ def write_loan_amortisation(ws, rows: List[LoanRow]):
     # Write loan rows starting at row 5.
     for row_idx, r in enumerate(rows, start=5):
         ws.cell(row=row_idx, column=1, value=r.loan_month)
-        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$18" if row_idx == 5 else f"=F{row_idx-1}"))
+        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$23" if row_idx == 5 else f"=F{row_idx-1}"))
         ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=5, value=f"=C{row_idx}+D{row_idx}")
@@ -1066,8 +1076,8 @@ def write_balance_sheet(ws, rows: List[BalanceRow]):
     for row_idx, r in enumerate(rows, start=3):
         ws.cell(row=row_idx, column=1, value=r.year)
         ws.cell(row=row_idx, column=2, value=r.month)
-        ws.cell(row=row_idx, column=3, value=f"=IF($A{row_idx}>1,0,Assumptions!$B$22+IF($B{row_idx}>4,Assumptions!$B$27,0))")
-        ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$22 + Assumptions!$B$23),0,IF($B{row_idx}>4,(Assumptions!$B$22+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$22-$U{row_idx}))")
+        ws.cell(row=row_idx, column=3, value=f"=IF($A{row_idx}>1,0,Assumptions!$B$27+IF($B{row_idx}>4,Assumptions!$B$27,0))")
+        ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$27 + Assumptions!$B$28),0,IF($B{row_idx}>4,(Assumptions!$B$27+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$27-$U{row_idx}))")
         ws.cell(row=row_idx, column=5, value=f"=Cash_Flow!$P{row_idx}")
         ws.cell(row=row_idx, column=6, value=r.cars_in_operation)
         ws.cell(row=row_idx, column=7, value=("=Assumptions!$B$29" if row_idx == 3 else f"=Fleet_Schedule!$I{row_idx}"))
