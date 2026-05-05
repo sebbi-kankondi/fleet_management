@@ -924,7 +924,7 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
         ws.cell(row=row_idx, column=7, value=r.cars_in_operation)
         ws.cell(row=row_idx, column=8, value=total_cars)
         if row_idx == 3:
-            ws.cell(row=row_idx, column=9, value="=$E3")
+            ws.cell(row=row_idx, column=9, value="=Assumptions!$B$29")
         else:
             ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
         ws.cell(row=row_idx, column=10, value=disposals)
@@ -1070,7 +1070,7 @@ def write_balance_sheet(ws, rows: List[BalanceRow]):
         ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$22 + Assumptions!$B$23),0,IF($B{row_idx}>4,(Assumptions!$B$22+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$22-$U{row_idx}))")
         ws.cell(row=row_idx, column=5, value=f"=Cash_Flow!$P{row_idx}")
         ws.cell(row=row_idx, column=6, value=r.cars_in_operation)
-        ws.cell(row=row_idx, column=7, value=f"=Fleet_Schedule!$I{row_idx}")
+        ws.cell(row=row_idx, column=7, value=("=Assumptions!$B$29" if row_idx == 3 else f"=Fleet_Schedule!$I{row_idx}"))
         ws.cell(row=row_idx, column=8, value=f"=$F{row_idx}*Assumptions!$B$4")
         ws.cell(row=row_idx, column=9, value=f"=$G{row_idx}*Assumptions!$B$4")
         ws.cell(row=row_idx, column=10, value=f"=Cash_Flow!$J{row_idx}")
