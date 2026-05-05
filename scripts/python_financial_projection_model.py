@@ -423,6 +423,16 @@ def ensure_required_assumptions(assumptions_ws):
         )
         assumptions_ws.cell(row=bank_instalment_row, column=2).number_format = '"N$" #,##0.00'
 
+    # Enforce requested Assumptions sheet cross-row references.
+    assumptions_ws.cell(row=19, column=2, value="=Assumptions!$B$24")
+    assumptions_ws.cell(row=18, column=2, value="=Assumptions!$B$23")
+    assumptions_ws.cell(row=4, column=2, value="=Assumptions!$B$4")
+    assumptions_ws.cell(row=22, column=2, value="=Assumptions!$B$27")
+    assumptions_ws.cell(row=23, column=2, value="=Assumptions!$B$28")
+    assumptions_ws.cell(row=7, column=2, value="=Assumptions!$B$7")
+    assumptions_ws.cell(row=6, column=2, value="=Assumptions!$B$6")
+    assumptions_ws.cell(row=24, column=2, value="=Assumptions!$B$29")
+
 
 # Read assumptions from sheet into dictionary keyed by label.
 def read_assumption_values(assumptions_ws, assumptions_values_ws=None) -> Dict[str, float]:
@@ -888,7 +898,11 @@ def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: Li
 # Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
 def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
     formula_templates: Dict[int, Dict[str, str]] = {}
+    cars_delivered_col_idx = None
     for col_idx in range(4, ws.max_column + 1):
+        header_value = ws.cell(row=2, column=col_idx).value
+        if header_value == "Cars Delivered (start operating)":
+            cars_delivered_col_idx = col_idx
         first_row_formula = ws.cell(row=3, column=col_idx).value
         following_row_formula = ws.cell(row=4, column=col_idx).value
         if isinstance(first_row_formula, str) and first_row_formula.startswith("="):
@@ -947,6 +961,15 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
             ws.cell(row=row_idx, column=9, value="=Assumptions!$B$29")
         else:
             ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
+        if cars_delivered_col_idx is not None:
+            if row_idx == 3:
+                ws.cell(row=row_idx, column=cars_delivered_col_idx, value="=Assumptions!$B$29")
+            else:
+                ws.cell(
+                    row=row_idx,
+                    column=cars_delivered_col_idx,
+                    value=f"=IF($A{row_idx}>Assumptions!$B$7,INDEX($D$3:$D$62,MATCH($A{row_idx}-Assumptions!$B$7,$A$3:$A$62,0)),0)",
+                )
 
 # Rewrite Income_Statement sheet with explicit new columns and regenerated values.
 def write_income_statement(ws, rows: List[IncomeRow]):
