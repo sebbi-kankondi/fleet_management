@@ -19,7 +19,6 @@ from typing import Dict, List
 
 # Import openpyxl workbook loader; this is the core Excel IO dependency for reading/writing sheets.
 from openpyxl import load_workbook
-from openpyxl.formula.translate import Translator
 
 
 # Map assumptions by exact label text used in the workbook Assumptions column A.
@@ -422,16 +421,6 @@ def ensure_required_assumptions(assumptions_ws):
             value=f"=-PMT({monthly_interest_cell},{loan_term_cell},{bank_draw_cell})",
         )
         assumptions_ws.cell(row=bank_instalment_row, column=2).number_format = '"N$" #,##0.00'
-
-    # Enforce requested Assumptions sheet cross-row references.
-    assumptions_ws.cell(row=19, column=2, value="=Assumptions!$B$24")
-    assumptions_ws.cell(row=18, column=2, value="=Assumptions!$B$23")
-    assumptions_ws.cell(row=4, column=2, value="=Assumptions!$B$4")
-    assumptions_ws.cell(row=22, column=2, value="=Assumptions!$B$27")
-    assumptions_ws.cell(row=23, column=2, value="=Assumptions!$B$28")
-    assumptions_ws.cell(row=7, column=2, value="=Assumptions!$B$7")
-    assumptions_ws.cell(row=6, column=2, value="=Assumptions!$B$6")
-    assumptions_ws.cell(row=24, column=2, value="=Assumptions!$B$29")
 
 
 # Read assumptions from sheet into dictionary keyed by label.
@@ -897,19 +886,6 @@ def build_balance_rows(a: Assumptions, fleet_rows: List[FleetRow], cash_rows: Li
 
 # Rewrite Fleet_Schedule starting from cars purchased and derived operational counts.
 def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
-    formula_templates: Dict[int, Dict[str, str]] = {}
-    cars_delivered_col_idx = None
-    for col_idx in range(4, ws.max_column + 1):
-        header_value = ws.cell(row=2, column=col_idx).value
-        if header_value == "Cars Delivered (start operating)":
-            cars_delivered_col_idx = col_idx
-        first_row_formula = ws.cell(row=3, column=col_idx).value
-        following_row_formula = ws.cell(row=4, column=col_idx).value
-        if isinstance(first_row_formula, str) and first_row_formula.startswith("="):
-            formula_templates[col_idx] = {"first": first_row_formula}
-            if isinstance(following_row_formula, str) and following_row_formula.startswith("="):
-                formula_templates[col_idx]["rest"] = following_row_formula
-
     cumulative_in_operation = 0.0
     disposal_lag_months = max(0, int(a.vehicle_disposal_trigger_years * 12))
     deliveries_by_month: Dict[int, float] = {}
@@ -942,34 +918,17 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
         ws.cell(row=row_idx, column=1, value=r.month)
         ws.cell(row=row_idx, column=2, value=r.year)
         ws.cell(row=row_idx, column=3, value=((r.month - 1) % 12) + 1)
-        for col_idx in range(4, ws.max_column + 1):
-            if col_idx == 9:
-                continue
-            if col_idx in formula_templates:
-                template = formula_templates[col_idx]["first"]
-                origin = "A3"
-                if row_idx > 3 and "rest" in formula_templates[col_idx]:
-                    template = formula_templates[col_idx]["rest"]
-                    origin = "A4"
-                ws.cell(
-                    row=row_idx,
-                    column=col_idx,
-                    value=Translator(template, origin=origin).translate_formula(f"A{row_idx}"),
-                )
-
+        ws.cell(row=row_idx, column=4, value=r.cars_purchased)
+        ws.cell(row=row_idx, column=5, value=deliveries)
+        ws.cell(row=row_idx, column=6, value=in_pipeline)
+        ws.cell(row=row_idx, column=7, value=r.cars_in_operation)
+        ws.cell(row=row_idx, column=8, value=total_cars)
         if row_idx == 3:
-            ws.cell(row=row_idx, column=9, value="=Assumptions!$B$29")
+            ws.cell(row=row_idx, column=9, value="=$E3")
         else:
             ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
-        if cars_delivered_col_idx is not None:
-            if row_idx == 3:
-                ws.cell(row=row_idx, column=cars_delivered_col_idx, value="=Assumptions!$B$29")
-            else:
-                ws.cell(
-                    row=row_idx,
-                    column=cars_delivered_col_idx,
-                    value=f"=IF($A{row_idx}>Assumptions!$B$7,INDEX($D$3:$D$62,MATCH($A{row_idx}-Assumptions!$B$7,$A$3:$A$62,0)),0)",
-                )
+        ws.cell(row=row_idx, column=10, value=disposals)
+        ws.cell(row=row_idx, column=11, value=cumulative_disposed)
 
 # Rewrite Income_Statement sheet with explicit new columns and regenerated values.
 def write_income_statement(ws, rows: List[IncomeRow]):
@@ -1075,7 +1034,7 @@ def write_loan_amortisation(ws, rows: List[LoanRow]):
     # Write loan rows starting at row 5.
     for row_idx, r in enumerate(rows, start=5):
         ws.cell(row=row_idx, column=1, value=r.loan_month)
-        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$23" if row_idx == 5 else f"=F{row_idx-1}"))
+        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$18" if row_idx == 5 else f"=F{row_idx-1}"))
         ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=5, value=f"=C{row_idx}+D{row_idx}")
@@ -1107,11 +1066,11 @@ def write_balance_sheet(ws, rows: List[BalanceRow]):
     for row_idx, r in enumerate(rows, start=3):
         ws.cell(row=row_idx, column=1, value=r.year)
         ws.cell(row=row_idx, column=2, value=r.month)
-        ws.cell(row=row_idx, column=3, value=f"=IF($A{row_idx}>1,0,Assumptions!$B$27+IF($B{row_idx}>4,Assumptions!$B$27,0))")
-        ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$27 + Assumptions!$B$28),0,IF($B{row_idx}>4,(Assumptions!$B$27+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$27-$U{row_idx}))")
+        ws.cell(row=row_idx, column=3, value=f"=IF($A{row_idx}>1,0,Assumptions!$B$22+IF($B{row_idx}>4,Assumptions!$B$27,0))")
+        ws.cell(row=row_idx, column=4, value=f"=IF($U{row_idx}>(Assumptions!$B$22 + Assumptions!$B$23),0,IF($B{row_idx}>4,(Assumptions!$B$22+Assumptions!$B$27)-$U{row_idx},Assumptions!$B$22-$U{row_idx}))")
         ws.cell(row=row_idx, column=5, value=f"=Cash_Flow!$P{row_idx}")
         ws.cell(row=row_idx, column=6, value=r.cars_in_operation)
-        ws.cell(row=row_idx, column=7, value=("=Assumptions!$B$29" if row_idx == 3 else f"=Fleet_Schedule!$I{row_idx}"))
+        ws.cell(row=row_idx, column=7, value=f"=Fleet_Schedule!$I{row_idx}")
         ws.cell(row=row_idx, column=8, value=f"=$F{row_idx}*Assumptions!$B$4")
         ws.cell(row=row_idx, column=9, value=f"=$G{row_idx}*Assumptions!$B$4")
         ws.cell(row=row_idx, column=10, value=f"=Cash_Flow!$J{row_idx}")
