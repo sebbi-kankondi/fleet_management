@@ -19,6 +19,7 @@ from typing import Dict, List
 
 # Import openpyxl workbook loader; this is the core Excel IO dependency for reading/writing sheets.
 from openpyxl import load_workbook
+from openpyxl.formula.translate import Translator
 
 
 # Map assumptions by exact label text used in the workbook Assumptions column A.
@@ -899,6 +900,12 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
         initial_disposal_month = 1 + disposal_lag_months
         disposals_by_month[initial_disposal_month] = disposals_by_month.get(initial_disposal_month, 0.0) + float(a.initial_cars)
 
+    template_formulas = {}
+    for col in range(1, 12):
+        template_value = ws.cell(row=3, column=col).value
+        if isinstance(template_value, str) and template_value.startswith("="):
+            template_formulas[col] = template_value
+
     for row_idx, r in enumerate(rows, start=3):
         deliveries_by_month[r.month + a.procurement_lead_time] = deliveries_by_month.get(r.month + a.procurement_lead_time, 0.0) + r.cars_purchased
         deliveries = deliveries_by_month.get(r.month, 0.0)
@@ -929,6 +936,11 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
             ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
         ws.cell(row=row_idx, column=10, value=disposals)
         ws.cell(row=row_idx, column=11, value=cumulative_disposed)
+
+        for col, formula in template_formulas.items():
+            if col == 9:
+                continue
+            ws.cell(row=row_idx, column=col, value=Translator(formula, origin=f"{ws.cell(row=3, column=col).coordinate}").translate_formula(f"{ws.cell(row=row_idx, column=col).coordinate}"))
 
 # Rewrite Income_Statement sheet with explicit new columns and regenerated values.
 def write_income_statement(ws, rows: List[IncomeRow]):
@@ -1007,14 +1019,14 @@ def write_cash_flow(ws, rows: List[CashFlowRow]):
         ws.cell(row=row_idx, column=3, value=r.bank_draw)
         ws.cell(row=row_idx, column=4, value=r.total_cash_in)
         ws.cell(row=row_idx, column=5, value=r.operating_expenses_cash)
-        ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$33,$A{row_idx}<Assumptions!$B$33+Assumptions!$B$31),($O{row_idx}+$C{row_idx})*Assumptions!$B$32,0)")
-        ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$33,$A{row_idx}<Assumptions!$B$33+Assumptions!$B$31),MIN(($O{row_idx}+$C{row_idx}),Assumptions!$B$25-$F{row_idx}),0)")
+        ws.cell(row=row_idx, column=6, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$24,$A{row_idx}<Assumptions!$B$24+Assumptions!$B$31),($O{row_idx}+$C{row_idx})*Assumptions!$B$32,0)")
+        ws.cell(row=row_idx, column=7, value=f"=IF(AND($A{row_idx}>=Assumptions!$B$24,$A{row_idx}<Assumptions!$B$24+Assumptions!$B$31),MIN(($O{row_idx}+$C{row_idx}),Assumptions!$B$23-$F{row_idx}),0)")
         ws.cell(row=row_idx, column=8, value=r.income_tax_paid)
         ws.cell(
             row=row_idx,
             column=9,
             value=(
-                f"=IF($A{row_idx}<Assumptions!$B$36,Assumptions!$B$34*Fleet_Schedule!$G{row_idx},"
+                f"=IF($A{row_idx}<Assumptions!$B$28,Assumptions!$B$34*Fleet_Schedule!$G{row_idx},"
                 f"ROUND(Assumptions!$B$34*(Fleet_Schedule!$G{row_idx}-(Assumptions!$B$23/Assumptions!$B$4)),0))"
             ),
         )
@@ -1034,7 +1046,7 @@ def write_loan_amortisation(ws, rows: List[LoanRow]):
     # Write loan rows starting at row 5.
     for row_idx, r in enumerate(rows, start=5):
         ws.cell(row=row_idx, column=1, value=r.loan_month)
-        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$18" if row_idx == 5 else f"=F{row_idx-1}"))
+        ws.cell(row=row_idx, column=2, value=("=Assumptions!$B$23" if row_idx == 5 else f"=F{row_idx-1}"))
         ws.cell(row=row_idx, column=3, value=f"=INDEX(Cash_Flow!$F:$F,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=4, value=f"=INDEX(Cash_Flow!$G:$G,MATCH(Assumptions!$B$28+A{row_idx}-1,Cash_Flow!$A:$A,0))")
         ws.cell(row=row_idx, column=5, value=f"=C{row_idx}+D{row_idx}")
