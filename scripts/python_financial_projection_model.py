@@ -923,7 +923,10 @@ def write_fleet_schedule(ws, rows: List[FleetRow], a: Assumptions):
         ws.cell(row=row_idx, column=6, value=in_pipeline)
         ws.cell(row=row_idx, column=7, value=r.cars_in_operation)
         ws.cell(row=row_idx, column=8, value=total_cars)
-        ws.cell(row=row_idx, column=9, value=cumulative_in_operation)
+        if row_idx == 3:
+            ws.cell(row=row_idx, column=9, value="=$E3")
+        else:
+            ws.cell(row=row_idx, column=9, value=f"=$I{row_idx-1}+$E{row_idx}")
         ws.cell(row=row_idx, column=10, value=disposals)
         ws.cell(row=row_idx, column=11, value=cumulative_disposed)
 
