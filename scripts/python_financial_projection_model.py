@@ -32,6 +32,14 @@ DEFAULT_INPUT = Path("data/financial_projections.xlsx")
 DEFAULT_OUTPUT_NAME = "financial_projections_final.xlsx"
 ASSUMPTIONS_SHEET_NAME = "Assumptions"
 
+COST_OF_SALES_LABEL = "Cost of sales"
+MONTHLY_GROSS_REVENUE_LABEL = "Monthly Gross revenue per car"
+MONTHLY_GROSS_PROFIT_LABEL = "Monthly Gross profit per car"
+SALARY_EXPENSE_LABEL = "Salary expense per operating car (monthly)"
+TOTAL_OPERATING_EXPENSES_LABEL = "Total operating expenses per operating car (monthly)"
+OPERATING_PROFIT_LABEL = "Operating Profit"
+
+
 NS_MAIN_URI = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 NS_REL_URI = "http://schemas.openxmlformats.org/package/2006/relationships"
 NS_OFFICE_REL_URI = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -314,40 +322,74 @@ def read_numeric_assumption_values(worksheet_xml: ET.Element, assumption_rows: l
     return values
 
 
-def update_calculated_assumption_cells(worksheet_xml: ET.Element, assumption_rows: list[AssumptionRow]) -> dict[str, float]:
-    """Refresh known calculated assumption rows for immediate final-file display."""
+def update_calculated_assumption_cells(
+    worksheet_xml: ET.Element,
+    assumption_rows: list[AssumptionRow],
+    explicit_update_labels: set[str] | None = None,
+) -> dict[str, float]:
+    """Refresh known calculated assumption rows unless users set them directly."""
+    explicit_update_labels = explicit_update_labels or set()
     numeric_values = read_numeric_assumption_values(worksheet_xml, assumption_rows)
-    calculations = {
-        "Cost of sales": [
-            "Fuel expense per operating car (monthly)",
-            "Airtime expense per operating car (monthly)",
-            "Carwash expense per operating car (monthly)",
-            "Maintenance expense per active car (monthly)",
-            "Driver subsistence",
-            "Incidental repair reserve",
-            "Tracking device expense",
-        ],
-    }
+    cost_of_sales_inputs = [
+        "Fuel expense per operating car (monthly)",
+        "Airtime expense per operating car (monthly)",
+        "Carwash expense per operating car (monthly)",
+        "Maintenance expense per active car (monthly)",
+        "Driver subsistence",
+        "Incidental repair reserve",
+        "Tracking device expense",
+    ]
 
     calculated_updates: dict[str, float] = {}
-    if all(label in numeric_values for label in calculations["Cost of sales"]):
-        calculated_updates["Cost of sales"] = sum(numeric_values[label] for label in calculations["Cost of sales"])
-    if "Monthly Gross revenue per car" in numeric_values and "Cost of sales" in calculated_updates:
-        calculated_updates["Monthly Gross profit per car"] = (
-            numeric_values["Monthly Gross revenue per car"] - calculated_updates["Cost of sales"]
-        )
-    if "Salary expense per operating car (monthly)" in numeric_values and "Cost of sales" in calculated_updates:
-        calculated_updates["Total operating expenses per operating car (monthly)"] = (
-            calculated_updates["Cost of sales"] + numeric_values["Salary expense per operating car (monthly)"]
-        )
-    if (
-        "Monthly Gross profit per car" in calculated_updates
-        and "Salary expense per operating car (monthly)" in numeric_values
-    ):
-        calculated_updates["Operating Profit"] = (
-            calculated_updates["Monthly Gross profit per car"]
-            - numeric_values["Salary expense per operating car (monthly)"]
-        )
+    calculated_values: dict[str, float] = {}
+
+    if all(label in numeric_values for label in cost_of_sales_inputs):
+        if COST_OF_SALES_LABEL in explicit_update_labels and COST_OF_SALES_LABEL in numeric_values:
+            calculated_values[COST_OF_SALES_LABEL] = numeric_values[COST_OF_SALES_LABEL]
+        else:
+            calculated_values[COST_OF_SALES_LABEL] = sum(
+                numeric_values[label] for label in cost_of_sales_inputs
+            )
+            calculated_updates[COST_OF_SALES_LABEL] = calculated_values[COST_OF_SALES_LABEL]
+
+    if MONTHLY_GROSS_REVENUE_LABEL in numeric_values and COST_OF_SALES_LABEL in calculated_values:
+        if (
+            MONTHLY_GROSS_PROFIT_LABEL in explicit_update_labels
+            and MONTHLY_GROSS_PROFIT_LABEL in numeric_values
+        ):
+            calculated_values[MONTHLY_GROSS_PROFIT_LABEL] = numeric_values[MONTHLY_GROSS_PROFIT_LABEL]
+        else:
+            calculated_values[MONTHLY_GROSS_PROFIT_LABEL] = (
+                numeric_values[MONTHLY_GROSS_REVENUE_LABEL] - calculated_values[COST_OF_SALES_LABEL]
+            )
+            calculated_updates[MONTHLY_GROSS_PROFIT_LABEL] = calculated_values[
+                MONTHLY_GROSS_PROFIT_LABEL
+            ]
+
+    if SALARY_EXPENSE_LABEL in numeric_values and COST_OF_SALES_LABEL in calculated_values:
+        if (
+            TOTAL_OPERATING_EXPENSES_LABEL in explicit_update_labels
+            and TOTAL_OPERATING_EXPENSES_LABEL in numeric_values
+        ):
+            calculated_values[TOTAL_OPERATING_EXPENSES_LABEL] = numeric_values[
+                TOTAL_OPERATING_EXPENSES_LABEL
+            ]
+        else:
+            calculated_values[TOTAL_OPERATING_EXPENSES_LABEL] = (
+                calculated_values[COST_OF_SALES_LABEL] + numeric_values[SALARY_EXPENSE_LABEL]
+            )
+            calculated_updates[TOTAL_OPERATING_EXPENSES_LABEL] = calculated_values[
+                TOTAL_OPERATING_EXPENSES_LABEL
+            ]
+
+    if MONTHLY_GROSS_PROFIT_LABEL in calculated_values and SALARY_EXPENSE_LABEL in numeric_values:
+        if OPERATING_PROFIT_LABEL in explicit_update_labels and OPERATING_PROFIT_LABEL in numeric_values:
+            calculated_values[OPERATING_PROFIT_LABEL] = numeric_values[OPERATING_PROFIT_LABEL]
+        else:
+            calculated_values[OPERATING_PROFIT_LABEL] = (
+                calculated_values[MONTHLY_GROSS_PROFIT_LABEL] - numeric_values[SALARY_EXPENSE_LABEL]
+            )
+            calculated_updates[OPERATING_PROFIT_LABEL] = calculated_values[OPERATING_PROFIT_LABEL]
 
     if calculated_updates:
         write_direct_assumption_updates(worksheet_xml, assumption_rows, calculated_updates)
@@ -395,7 +437,9 @@ def apply_assumption_updates(workbook_path: Path, updates: dict[str, object]) ->
         parts = find_workbook_parts(source_zip)
         worksheet_xml = ET.fromstring(source_zip.read(parts.assumptions_sheet_part))
         applied = write_direct_assumption_updates(worksheet_xml, assumption_rows, updates)
-        calculated = update_calculated_assumption_cells(worksheet_xml, assumption_rows)
+        calculated = update_calculated_assumption_cells(
+            worksheet_xml, assumption_rows, explicit_update_labels=set(applied)
+        )
 
         workbook_xml = ET.fromstring(source_zip.read(parts.workbook_part))
         force_full_workbook_recalculation(workbook_xml)

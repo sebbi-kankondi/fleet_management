@@ -130,6 +130,8 @@ When you provide input changes, the script:
   - `Monthly Gross profit per car`;
   - `Total operating expenses per operating car (monthly)`;
   - `Operating Profit`;
+- keeps any calculated total that you set directly, by name or value cell, and
+  only refreshes the remaining calculated totals around that explicit value;
 - marks the workbook for full formula recalculation when opened in Excel or a
   compatible spreadsheet application.
 
