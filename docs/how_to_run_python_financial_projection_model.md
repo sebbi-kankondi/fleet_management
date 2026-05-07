@@ -1,45 +1,51 @@
-# How to run `python_financial_projection_model_logic.py` (step-by-step)
+# How to run the financial projection workbook generator
+
+This guide shows how to generate `data/financial_projections_final.xlsx` from
+`data/financial_projections.xlsx` and how to change assumptions without opening
+the source workbook manually.
 
 ## 1) Open the project in VS Code
 1. Open VS Code.
 2. Go to **File -> Open Folder**.
 3. Select the project root folder: `fleet_management`.
 
-## 2) Open powershell
-1. change directory first (example):
-   ```powershell
-   cd C:\path\to\fleet_management
-2. Confirm you are in the project root
+## 2) Open PowerShell or a terminal
+Change to the project root first. Example:
+
+```powershell
+cd C:\path\to\fleet_management
+```
+
+Confirm you are in the project root:
+
+```powershell
 pwd
 dir
-(you should see files like `data/` and `python_financial_projection_model.py`).
-
-## 3) Create and activate a virtual environment
-
-### Windows (PowerShell)
-```powershell
-python -m venv .venv
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-.venv\Scripts\Activate.ps1
 ```
 
-If you created/activated the venv in **PowerShell**, keep using the **same PowerShell session** for the next commands.
-There is **no need to switch to Git Bash** after activation.
+You should see folders such as `data/`, `docs/`, and `scripts/`.
 
-## 4) Install dependencies
-The script uses `openpyxl` for Excel read/write.
+## 3) Validate script syntax (optional but recommended)
 
-```powershell
-pip install openpyxl
-```
+The current script uses only Python's standard library, so you do not need to
+install `openpyxl` for the assumption input layer.
 
-## 5) Validate script syntax (optional but recommended)
 ```powershell
 python -m py_compile scripts/python_financial_projection_model.py
 ```
 
-## 6) Run the model generator
-Run with explicit input and output paths:
+## 4) See the editable assumptions
+
+Run this command to list every assumption name, value cell, current value, and
+unit from the `Assumptions` sheet:
+
+```powershell
+python scripts/python_financial_projection_model.py --list-assumptions
+```
+
+Use these names with `--set` or in a JSON assumptions file.
+
+## 5) Generate the final workbook with no assumption changes
 
 ```powershell
 python scripts/python_financial_projection_model.py `
@@ -47,56 +53,99 @@ python scripts/python_financial_projection_model.py `
   --output data/financial_projections_final.xlsx
 ```
 
-If successful, it prints a completion message with the output file path.
+This copies all formulas and non-formula values from the source workbook into the
+final workbook.
 
-## 7) What the script updates
-The script updates/creates required assumptions and regenerates these sheets dynamically:
-- `Income_Statement`
-- `Cash_Flow`
-- `Loan_Amortisation`
-- `Balance_Sheet`
+## 6) Generate the final workbook with command-line assumption changes
 
-It reads fleet drivers from:
-- `Fleet_Schedule`
-
-And it enforces requested assumptions:
-- Driver subsistence allocation = 1400 (cost of sales)
-- Maintenance = 1250 (monthly per active car)
-- Incidental repair reserve = 500 (cost of sales)
-- Airtime = 290 (monthly per operating car)
-- Tracking device expense = 950 (cost of sales)
-- Cost of sales as a calculated assumption
-
-## 8) Run with auto-generated output filename
-If you omit `--output`, the script creates a timestamped output in `data/`:
+Use one or more `--set "Assumption name=value"` arguments. The source workbook
+is not edited; only the generated final workbook receives these changes.
 
 ```powershell
-python python_financial_projection_model.py --input data/financial_projections.xlsx
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx `
+  --set "Fuel expense per operating car (monthly)=12000" `
+  --set "Monthly Gross revenue per car=32000"
 ```
 
-Example output filename format:
-- `data/financial_projections_final_YYYYMMDD_HHMMSS.xlsx`
+You can also use a value cell from the `Assumptions` sheet, such as `B8`, if you
+prefer:
 
-## 9) Troubleshooting
-
-### Error: `ModuleNotFoundError: No module named 'openpyxl'`
-Install dependency:
 ```powershell
-pip install openpyxl
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx `
+  --set "B8=12000"
 ```
+
+## 7) Generate the final workbook from a JSON assumptions file
+
+Create a JSON file such as `scenario.json`:
+
+```json
+{
+  "Fuel expense per operating car (monthly)": 12000,
+  "Monthly Gross revenue per car": 32000,
+  "Bank nominal annual interest rate": 0.11
+}
+```
+
+Then run:
+
+```powershell
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx `
+  --assumptions-file scenario.json
+```
+
+## 8) Use the interactive input layer
+
+If you prefer to type changes one by one, run:
+
+```powershell
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx `
+  --interactive
+```
+
+The script will list the assumptions and prompt for entries in this format:
+
+```text
+Assumption name=value
+```
+
+Press **Enter** on a blank line when you are done.
+
+## 9) What the script updates
+
+When you provide input changes, the script:
+
+- copies `financial_projections.xlsx` to `financial_projections_final.xlsx`;
+- writes your changed values into the `Assumptions` sheet in the final workbook;
+- refreshes the visible calculated assumption totals for:
+  - `Cost of sales`;
+  - `Monthly Gross profit per car`;
+  - `Total operating expenses per operating car (monthly)`;
+  - `Operating Profit`;
+- marks the workbook for full formula recalculation when opened in Excel or a
+  compatible spreadsheet application.
+
+The original `data/financial_projections.xlsx` remains unchanged.
+
+## 10) Troubleshooting
 
 ### Error: input file not found
 Check the path passed to `--input` and ensure the file exists.
 
-### Output looks unchanged
-Ensure you opened the generated output file (the `--output` path or timestamped file), not the original source file.
+### Error: unknown assumption
+Run `--list-assumptions` and copy the exact assumption name, or use the value
+cell shown next to the assumption, such as `B8`.
 
-## 10) After first run
-```powershell
-   cd C:\path\to\fleet_management #go to root directory
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-.venv\Scripts\Activate.ps1 #reactivate venv
-python -m py_compile scripts/python_financial_projection_model.py #validate script syntax
-python scripts/python_financial_projection_model.py `
-  --input data/financial_projections.xlsx `
-  --output data/financial_projections_final.xlsx #generate final projections file
+### Output looks unchanged
+Ensure you opened the generated output file (`data/financial_projections_final.xlsx`),
+not the original source workbook (`data/financial_projections.xlsx`). If formulas
+look stale in a non-Excel viewer, open the file in Excel or a compatible
+spreadsheet application that honors full-workbook recalculation on load.
