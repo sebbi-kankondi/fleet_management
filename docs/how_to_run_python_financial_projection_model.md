@@ -27,10 +27,10 @@ You should see folders such as `data/`, `docs/`, and `scripts/`.
 
 ## 3) Validate script syntax (optional but recommended)
 
-The current script uses only Python's standard library, so you do not need to
-install `openpyxl` for the assumption input layer.
+Install dependencies first; the workbook writer uses `openpyxl` to load and save the copied XLSX safely.
 
 ```powershell
+python -m pip install -r requirements.txt
 python -m py_compile scripts/python_financial_projection_model.py
 ```
 
@@ -53,8 +53,7 @@ python scripts/python_financial_projection_model.py `
   --output data/financial_projections_final.xlsx
 ```
 
-This copies all formulas and non-formula values from the source workbook into the
-final workbook.
+This copies the source workbook to the output path with `shutil.copy2`, then opens and saves only the copied workbook with `openpyxl` so worksheets, formulas, styles, relationships, and workbook structure are preserved as safely as possible.
 
 ## 6) Generate the final workbook with command-line assumption changes
 
@@ -123,8 +122,8 @@ Press **Enter** on a blank line when you are done.
 
 When you provide input changes, the script:
 
-- copies `financial_projections.xlsx` to `financial_projections_final.xlsx`;
-- writes your changed values into the `Assumptions` sheet in the final workbook;
+- copies `financial_projections.xlsx` to `financial_projections_final.xlsx` with `shutil.copy2`;
+- loads only the copied final workbook with `openpyxl` and writes your changed values into its `Assumptions` sheet;
 - refreshes the visible calculated assumption totals for:
   - `Cost of sales`;
   - `Monthly Gross profit per car`;
@@ -133,7 +132,8 @@ When you provide input changes, the script:
 - keeps any calculated total that you set directly, by name or value cell, and
   only refreshes the remaining calculated totals around that explicit value;
 - marks the workbook for full formula recalculation when opened in Excel or a
-  compatible spreadsheet application.
+  compatible spreadsheet application;
+- validates the saved XLSX archive by reopening it after save.
 
 The original `data/financial_projections.xlsx` remains unchanged.
 
