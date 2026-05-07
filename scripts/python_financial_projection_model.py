@@ -23,11 +23,11 @@ import shutil
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
-from openpyxl import load_workbook
-from openpyxl.cell.cell import Cell
-from openpyxl.worksheet.worksheet import Worksheet
+if TYPE_CHECKING:
+    from openpyxl.cell.cell import Cell
+    from openpyxl.worksheet.worksheet import Worksheet
 
 
 DEFAULT_INPUT = Path("data/financial_projections.xlsx")
@@ -102,6 +102,8 @@ def list_assumptions_from_worksheet(worksheet: Worksheet) -> list[AssumptionRow]
 
 def list_assumptions(workbook_path: Path) -> list[AssumptionRow]:
     """Read assumptions from the workbook's Assumptions sheet with openpyxl."""
+    from openpyxl import load_workbook
+
     workbook = load_workbook(workbook_path, data_only=False, keep_links=True, rich_text=True)
     worksheet = require_assumptions_sheet(workbook)
     assumptions = list_assumptions_from_worksheet(worksheet)
@@ -277,6 +279,8 @@ def force_full_workbook_recalculation(workbook: object) -> None:
 
 def validate_xlsx(workbook_path: Path) -> None:
     """Validate that the saved output is a readable XLSX archive and workbook."""
+    from openpyxl import load_workbook
+
     with zipfile.ZipFile(workbook_path) as workbook_archive:
         bad_file = workbook_archive.testzip()
         if bad_file is not None:
@@ -288,17 +292,18 @@ def validate_xlsx(workbook_path: Path) -> None:
 
 def apply_assumption_updates(workbook_path: Path, updates: dict[str, object]) -> dict[str, str]:
     """Apply assumption updates in-place to an xlsx workbook copy with openpyxl."""
+    if not updates:
+        return {}
+
+    from openpyxl import load_workbook
+
     workbook = load_workbook(workbook_path, data_only=False, keep_links=True, rich_text=True)
     worksheet = require_assumptions_sheet(workbook)
     assumption_rows = list_assumptions_from_worksheet(worksheet)
-    applied: dict[str, str] = {}
-    calculated: dict[str, float] = {}
-
-    if updates:
-        applied = write_direct_assumption_updates(worksheet, assumption_rows, updates)
-        calculated = update_calculated_assumption_cells(
-            worksheet, assumption_rows, explicit_update_labels=set(applied)
-        )
+    applied = write_direct_assumption_updates(worksheet, assumption_rows, updates)
+    calculated = update_calculated_assumption_cells(
+        worksheet, assumption_rows, explicit_update_labels=set(applied)
+    )
 
     force_full_workbook_recalculation(workbook)
     workbook.save(workbook_path)
