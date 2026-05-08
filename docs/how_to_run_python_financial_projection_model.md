@@ -30,7 +30,7 @@ You should see folders such as `data/`, `docs/`, and `scripts/`.
 Install dependencies first; the workbook writer uses `openpyxl` to load and save the copied XLSX safely.
 
 ```powershell
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt #not needed after first run
 python -m py_compile scripts/python_financial_projection_model.py
 ```
 
@@ -45,7 +45,28 @@ python scripts/python_financial_projection_model.py --list-assumptions
 
 Use these names with `--set` or in a JSON assumptions file.
 
-## 5) Generate the final workbook with no assumption changes
+## 5) Generate the final workbook from a JSON assumptions file
+
+Create a JSON file such as `scenario.json`:
+
+```json
+{
+  "Fuel expense per operating car (monthly)": 12000,
+  "Monthly Gross revenue per car": 32000,
+  "Bank nominal annual interest rate": 0.11
+}
+```
+
+Then run:
+
+```powershell
+python scripts/python_financial_projection_model.py `
+  --input data/financial_projections.xlsx `
+  --output data/financial_projections_final.xlsx `
+  --assumptions-file scenarios/scenario.json
+```
+
+## 6) To test the script - Generate the final workbook with no assumption changes
 
 ```powershell
 python scripts/python_financial_projection_model.py `
@@ -55,7 +76,7 @@ python scripts/python_financial_projection_model.py `
 
 This copies the source workbook to the output path with `shutil.copy2`, then opens and saves only the copied workbook with `openpyxl` so worksheets, formulas, styles, relationships, and workbook structure are preserved as safely as possible.
 
-## 6) Generate the final workbook with command-line assumption changes
+## 7) Generate the final workbook with command-line assumption changes
 
 Use one or more `--set "Assumption name=value"` arguments. The source workbook
 is not edited; only the generated final workbook receives these changes.
@@ -78,28 +99,7 @@ python scripts/python_financial_projection_model.py `
   --set "B8=12000"
 ```
 
-## 7) Generate the final workbook from a JSON assumptions file
-
-Create a JSON file such as `scenario.json`:
-
-```json
-{
-  "Fuel expense per operating car (monthly)": 12000,
-  "Monthly Gross revenue per car": 32000,
-  "Bank nominal annual interest rate": 0.11
-}
-```
-
-Then run:
-
-```powershell
-python scripts/python_financial_projection_model.py `
-  --input data/financial_projections.xlsx `
-  --output data/financial_projections_final.xlsx `
-  --assumptions-file scenario.json
-```
-
-## 8) Use the interactive input layer
+## 9) Use the interactive input layer
 
 If you prefer to type changes one by one, run:
 
@@ -118,7 +118,7 @@ Assumption name=value
 
 Press **Enter** on a blank line when you are done.
 
-## 9) What the script updates
+## 10) What the script updates
 
 When you provide input changes, the script:
 
@@ -137,7 +137,7 @@ When you provide input changes, the script:
 
 The original `data/financial_projections.xlsx` remains unchanged.
 
-## 10) Troubleshooting
+## 11) Troubleshooting
 
 ### Error: input file not found
 Check the path passed to `--input` and ensure the file exists.
