@@ -1,5 +1,5 @@
 {
-  "Vehicle disposal trigger": 30,
+  "Contract length": 30,
   "Maintenance expense per active car (monthly)": 3000,
   "Incidental repair reserve": 2000,
   "Driver subsistence": 1500

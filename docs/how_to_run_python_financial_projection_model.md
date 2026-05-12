@@ -62,11 +62,20 @@ Then run:
 ```powershell
 python scripts/python_financial_projection_model.py `
   --input data/financial_projections.xlsx `
-  --output data/financial_projections_final.xlsx `
-  --assumptions-file scenarios/scenario.json
+  --output data/financial_projections_15m.xlsx `
+  --assumptions-file scenarios/scenario15m.json
 ```
 
-## 6) To test the script - Generate the final workbook with no assumption changes
+## 6) Generate the sheets required for report generation in R
+
+After generating the files:
+1. Copy them from "C:\Users\Sebbi Kankondi\fleet_management\data" to "C:\Users\Sebbi Kankondi\Documents\Admin\business_docs\plan\molenzicht_r2o"
+2. Open them
+3. Click ctrl + alt + fn9 to force recalculation
+
+The files will then be ready to be processed in R without them displaying NA values where there are formulas.
+
+## 7) To test the script - Generate the final workbook with no assumption changes
 
 ```powershell
 python scripts/python_financial_projection_model.py `
@@ -76,7 +85,7 @@ python scripts/python_financial_projection_model.py `
 
 This copies the source workbook to the output path with `shutil.copy2`, then opens and saves only the copied workbook with `openpyxl` so worksheets, formulas, styles, relationships, and workbook structure are preserved as safely as possible.
 
-## 7) Generate the final workbook with command-line assumption changes
+## 8) Generate the final workbook with command-line assumption changes
 
 Use one or more `--set "Assumption name=value"` arguments. The source workbook
 is not edited; only the generated final workbook receives these changes.
